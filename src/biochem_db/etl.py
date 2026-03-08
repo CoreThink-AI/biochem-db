@@ -344,4 +344,56 @@ def load_preferred_iupac_name():
         del graph
 
 
+def flatten_name_lists(dict_of_dicts=None):
+    if dict_of_dicts is None:
+        dict_of_dicts = DATA_DIR / 'testset_name_lists.json'
+    names = dict_of_dicts
+    if isinstance(names, (str, Path)):
+        names = json.load(open(names))
+    flattened = []
+    for k, v in names.items():
+        print(k, type(v))
+        for i, x in v.items():
+            # if isinstance(x, (tuple, set, list)):
+            #     flattened.extend(list(x))
+            if not isinstance(x, list):
+                print(type(x), str(x)[:20])
+            if isinstance(x, str):
+                x = [(x, i)]
+            flattened.extend(list(zip(x, (i for k in range(1_000_000)))))
+    # json.dump(flattened, open('testset_name_cid_pairs.json', 'w'))
+
+    df = pd.DataFrame(flattened, columns = 'name cid'.split())
+    print('unambiguous   name->cid %', round(100 - 100. * df['name'].nunique() / len(df), 2))
+    print('max ambiguity name->cid  ', df['name'].value_counts().max())
+    print('unambiguous   cid->name %', round(100 - 100. * df['cid'].nunique() / len(df), 2))
+    print('max ambiguity cid->name  ', df['cid'].value_counts().max())
+    df = df.set_index('name')
+    return df['name']
+
+
+def get_cid(series, first=True):
+    """ For a pd.Series with redundant index (.loc[]) values, retrieve all or just first value 
+
+    >>> s = flatten_name_lists()
+    >>> df.loc['Pyridoxamine, dihydrochloride']
+    >>> df.loc['CHEMBL1161476']
+    type(dfuniq.loc['CHEMBL1161476'])
+    type(dfuniq.loc['Pyridoxamine, dihydrochloride'])
+    df.to_numpy()
+    type(dfuniq.loc['CHEMBL1161476'].to_numpy())
+    dfuniq.loc['CHEMBL1161476'].to_numpy()
+    dfuniq.loc['Pyridoxamine, dihydrochloride'].to_numpy()
+    dfuniq.loc['Pyridoxamine, dihydrochloride'].to_numpy().shape
+    dfuniq.loc['CHEMBL1161476'].to_numpy().shape
+    dfuniq.loc['CHEMBL1161476'].to_numpy().ndim
+    dfuniq.loc['Pyridoxamine, dihydrochloride'].to_numpy().ndim
+    hist -o -p -f flatten_testset_name_lists_and_nonunique_df_index_lookup.hist.ipy
+    dfuniq.loc['CHEMBL1161476'].to_numpy().flatten()
+    dfuniq.loc['Pyridoxamine, dihydrochloride'].to_numpy().flatten()
+    hist -o -p -f flatten_testset_name_lists_and_nonunique_df_index_lookup.hist.ipy
+    hist -f flatten_testset_name_lists_and_nonunique_df_index_lookup.hist.py
+
+
+
 

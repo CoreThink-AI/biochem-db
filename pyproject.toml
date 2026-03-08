@@ -9,6 +9,43 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "molid>=0.8.4",
+    "pandas",
+    "requests",
+]
+
+[project.optional-dependencies]
+all = [
+    "biochem_ai[ai,backends,dev,sql,apps]",
+]
+ai = [
+    "openrouter",
+    "google-api-core",
+    "google-cloud-storage",
+    "google-generativeai",
+    "google_cloud_aiplatform",
+    "langchain-community",
+    "langchain_google_genai",
+    "langchain",
+    "iso8601"
+]
+backends = [
+    "keplergl",
+    "pydeck",
+]
+dev = [
+    "watchfiles",
+    "jupyterlab",
+]
+sql = [
+    "psycopg2-binary",
+    "sqlalchemy",
+]
+apps = [
+    "gradio",
+    "streamlit-folium",
+    "plotly",
+#     "voila",
+#    "solara",
 ]
 
 [build-system]
