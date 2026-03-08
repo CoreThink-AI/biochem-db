@@ -1,0 +1,232 @@
+>>> from pubchem.etl import *
+CONNECTION.info {}
+
+>>> df = read_pubchem_csv()
+
+>>> df['name'].nunique()
+Out[5]: 11741192
+
+>>> df['name'].count()
+Out[6]: np.int64(11835558)
+
+>>> (df['name'].str.len() == 0).sum()
+Out[7]: np.int64(42)
+
+>>> counts = df['name'].value_counts()
+
+>>> counts[counts > 1]
+Out[13]: 
+name
+Ethane;methane                                    166
+Ethane;methane;propane                             92
+Ethane;propane                                     73
+Methane;propane                                    72
+Isocyanic acid;methane                             72
+                                                 ... 
+Potassium;azane;dihydrogen phosphate;phosphane      2
+Benzene-1,2-diol;thiocyanic acid                    2
+2-Chlorophenol;isocyanic acid                       2
+Methanesulfonic acid;octane-1,8-diamine             2
+Decane-1,10-diamine;methanesulfonic acid            2
+Name: count, Length: 72569, dtype: int64
+
+>>> df.columns
+Out[14]: 
+Index(['cid', 'name', 'synonyms', 'molecular_formula', 'inchi', 'smiles',
+       'inchikey', 'iupac_name', 'mesh_headings', 'annotation_content',
+       'linked_bioassays', 'data_source', 'data_source_category',
+       'tagged_by_pubchem', 'molecular_weight', 'polar_area', 'complexity',
+       'xlogp', 'heavy_atom_count', 'h-bond_donor_count',
+       'h-bond_acceptor_count', 'rotatable_bond_count', 'exact_mass',
+       'monoisotopic_mass', 'charge', 'covalent_unit_count',
+       'isotopic_atom_count', 'total_atom_stereo_count',
+       'defined_atom_stereo_count', 'undefined_atom_stereo_count',
+       'total_bond_stereo_count', 'defined_bond_stereo_count',
+       'undefined_bond_stereo_count', 'linked_pubchem_literature_count',
+       'linked_pubchem_patent_count', 'linked_pubchem_patent_family_count',
+       'annotation_type_count', 'create_date'],
+      dtype='str')
+
+>>> df[[c for c in df.columns if 'name' in c or 'syn' in c]].describe(include='all')
+Out[15]: 
+                  name  synonyms iupac_name
+count         11835558  11835558   11835558
+unique        11741192   6363812   11429840
+top     Ethane;methane                     
+freq               166   5471409     264942
+
+>>> names = df['name synonyms iupac_name'.split()]
+
+>>> names[names['synonyms'].str.len() > 50]
+Out[17]: 
+                                                        name                                           synonyms                                         iupac_name
+id                                                                                                                                                                
+1                                        Acetyl-DL-carnitine  Acetyl-DL-carnitine|14992-62-2|DL-O-Acetylcarn...        3-acetyloxy-4-(trimethylazaniumyl)butanoate
+2          2-(Acetyloxy)-3-carboxy-N,N,N-trimethylpropan-...  DTXSID40859554|7559-18-4|2-(acetyloxy)-3-carbo...     (2-acetyloxy-3-carboxypropyl)-trimethylazanium
+4                                         1-Amino-2-propanol  1-Aminopropan-2-ol|1-AMINO-2-PROPANOL|Isopropa...                                 1-aminopropan-2-ol
+5                              3-Amino-2-oxopropyl phosphate  3-Amino-2-oxopropyl phosphate|3-amino-2-oxopro...         (3-amino-2-oxopropyl) dihydrogen phosphate
+6                                1-Chloro-2,4-Dinitrobenzene  1-chloro-2,4-dinitrobenzene|2,4-Dinitrochlorob...                        1-chloro-2,4-dinitrobenzene
+...                                                      ...                                                ...                                                ...
+177896119                                                     3-isobutoxy-7-methyl-3,7-dihydro-2h-imidazo [2...  7-methyl-3-(2-methylpropoxy)-2,3-dihydroimidaz...
+177896121                                                     3-butoxy-7-methyl-3,7-dihydro-2h-imidazo [2,1-...  3-butoxy-7-methyl-2,3-dihydroimidazo[2,1-b][1,...
+177896494                                                     4-(2-Hydroxyethyl)-2-(1H-pyrazol-4-yl)phenol|A...       4-(2-hydroxyethyl)-2-(1H-pyrazol-4-yl)phenol
+177896512                                                     A1-129382|4-(2-Hydroxyethyl)-2-(tetrahydro-2H-...             4-(2-hydroxyethyl)-2-(oxan-4-yl)phenol
+177896524                                                     A1-129395|5-(2-Hydroxyethyl)-4'-methyl-[1,1'-b...        4-(2-hydroxyethyl)-2-(4-methylphenyl)phenol
+
+[1469594 rows x 3 columns]
+
+>>> names[names['synonyms'].str.len() > 150]
+Out[18]: 
+                                                        name                                           synonyms                                         iupac_name
+id                                                                                                                                                                
+1                                        Acetyl-DL-carnitine  Acetyl-DL-carnitine|14992-62-2|DL-O-Acetylcarn...        3-acetyloxy-4-(trimethylazaniumyl)butanoate
+2          2-(Acetyloxy)-3-carboxy-N,N,N-trimethylpropan-...  DTXSID40859554|7559-18-4|2-(acetyloxy)-3-carbo...     (2-acetyloxy-3-carboxypropyl)-trimethylazanium
+4                                         1-Amino-2-propanol  1-Aminopropan-2-ol|1-AMINO-2-PROPANOL|Isopropa...                                 1-aminopropan-2-ol
+5                              3-Amino-2-oxopropyl phosphate  3-Amino-2-oxopropyl phosphate|3-amino-2-oxopro...         (3-amino-2-oxopropyl) dihydrogen phosphate
+6                                1-Chloro-2,4-Dinitrobenzene  1-chloro-2,4-dinitrobenzene|2,4-Dinitrochlorob...                        1-chloro-2,4-dinitrobenzene
+...                                                      ...                                                ...                                                ...
+177844265  2,6-dihydroxy-4-methyl-1-[3-(methylazaniumyl)p...  DTXSID901377504|1333469-72-9|2,6-dihydroxy-4-m...  3-(2,6-dihydroxy-4-methylpyridin-1-ium-1-yl)pr...
+177865765                       Scandium oxalate hexahydrate  Scandium Oxalate Pentahydrate|scandium oxalate...                  oxalic acid;bis(scandium);hydrate
+177892934                                      CID 177892934  2-(4-Nitrosopiperazine-1-yl)pyrimidine-d  (no ...  2-(3,3,5,5-tetradeuterio-4-nitrosopiperazin-1-...
+177892972                                      CID 177892972  N-((2-isopropylthiazol-4-yl)methyl)-N-methylni...  N-[(2-propan-2-yl-1,3-thiazol-4-yl)methyl]-N-(...
+177892995                                      CID 177892995  N-Nitroso-meglumine-d  (Deuteration Level May ...  N-[(2S,3R,4R,5R)-2,3,4,5,6-pentahydroxyhexyl]-...
+
+[466991 rows x 3 columns]
+
+>>> names[names['synonyms'].str.len() > 250]
+Out[19]: 
+                                                        name                                           synonyms                                         iupac_name
+id                                                                                                                                                                
+1                                        Acetyl-DL-carnitine  Acetyl-DL-carnitine|14992-62-2|DL-O-Acetylcarn...        3-acetyloxy-4-(trimethylazaniumyl)butanoate
+2          2-(Acetyloxy)-3-carboxy-N,N,N-trimethylpropan-...  DTXSID40859554|7559-18-4|2-(acetyloxy)-3-carbo...     (2-acetyloxy-3-carboxypropyl)-trimethylazanium
+4                                         1-Amino-2-propanol  1-Aminopropan-2-ol|1-AMINO-2-PROPANOL|Isopropa...                                 1-aminopropan-2-ol
+5                              3-Amino-2-oxopropyl phosphate  3-Amino-2-oxopropyl phosphate|3-amino-2-oxopro...         (3-amino-2-oxopropyl) dihydrogen phosphate
+6                                1-Chloro-2,4-Dinitrobenzene  1-chloro-2,4-dinitrobenzene|2,4-Dinitrochlorob...                        1-chloro-2,4-dinitrobenzene
+...                                                      ...                                                ...                                                ...
+176518576            2-Carbamimidoylguanidine; sulfuric acid  6945-23-9|2-carbamimidoylguanidine; sulfuric a...             1-carbamimidoylguanidine;sulfuric acid
+176518669                            VUF 8430 (hydrobromide)  VUF 8430 dihydrobromide|VUF 8430 (hydrobromide...  2-carbamimidamidoethyl carbamimidothioate;dihy...
+176528359  N-cyclohexyl-N'-(diaminomethylene)guanidine hy...  1-Cyclohexylbiguanide monohydrochloride|N-cycl...  1-carbamimidoyl-2-cyclohexylguanidine;hydrochl...
+177892934                                      CID 177892934  2-(4-Nitrosopiperazine-1-yl)pyrimidine-d  (no ...  2-(3,3,5,5-tetradeuterio-4-nitrosopiperazin-1-...
+177892972                                      CID 177892972  N-((2-isopropylthiazol-4-yl)methyl)-N-methylni...  N-[(2-propan-2-yl-1,3-thiazol-4-yl)methyl]-N-(...
+
+[232219 rows x 3 columns]
+
+>>> names[names['synonyms'].str.len() > 350]
+Out[20]: 
+                                                        name                                           synonyms                                         iupac_name
+id                                                                                                                                                                
+1                                        Acetyl-DL-carnitine  Acetyl-DL-carnitine|14992-62-2|DL-O-Acetylcarn...        3-acetyloxy-4-(trimethylazaniumyl)butanoate
+2          2-(Acetyloxy)-3-carboxy-N,N,N-trimethylpropan-...  DTXSID40859554|7559-18-4|2-(acetyloxy)-3-carbo...     (2-acetyloxy-3-carboxypropyl)-trimethylazanium
+4                                         1-Amino-2-propanol  1-Aminopropan-2-ol|1-AMINO-2-PROPANOL|Isopropa...                                 1-aminopropan-2-ol
+5                              3-Amino-2-oxopropyl phosphate  3-Amino-2-oxopropyl phosphate|3-amino-2-oxopro...         (3-amino-2-oxopropyl) dihydrogen phosphate
+6                                1-Chloro-2,4-Dinitrobenzene  1-chloro-2,4-dinitrobenzene|2,4-Dinitrochlorob...                        1-chloro-2,4-dinitrobenzene
+...                                                      ...                                                ...                                                ...
+176516996                         Metformin-d6 Hydrochloride  Metformin-d6-hydrochloride|Metformin-d6 Hydroc...  2-carbamimidoyl-1,1-bis(trideuteriomethyl)guan...
+176517037                       Guanylcystamine hydrobromide  Guanylcystamine hydrobromide|Guanylcystamine d...  1-[2-[2-(diaminomethylideneamino)ethyldisulfan...
+176517396                       MetforMin IMpurity E Sulfate  MetforMin IMpurity E Sulfate|Imidodicarbonimid...    1-carbamimidoyl-2-methylguanidine;sulfuric acid
+176518669                            VUF 8430 (hydrobromide)  VUF 8430 dihydrobromide|VUF 8430 (hydrobromide...  2-carbamimidamidoethyl carbamimidothioate;dihy...
+177892972                                      CID 177892972  N-((2-isopropylthiazol-4-yl)methyl)-N-methylni...  N-[(2-propan-2-yl-1,3-thiazol-4-yl)methyl]-N-(...
+
+[129081 rows x 3 columns]
+
+>>> names[names['name'].str.len() > 350]
+Out[21]: 
+                                                        name         synonyms                                         iupac_name
+id                                                                                                                              
+157051083  (2R)-2-deuterio-N-methyl-1-phenyl-N-prop-2-yny...                   (2R)-2-deuterio-N-methyl-1-phenyl-N-prop-2-yny...
+157066149  (1R,2S,4R)-1-methoxy-2-methyl-4-(2-methylpropy...                   (1R,2S,4R)-1-methoxy-2-methyl-4-(2-methylpropy...
+157085802  Butane;2,2-dimethylbutane;2,3-dimethylbutane;2...                   butane;2,2-dimethylbutane;2,3-dimethylbutane;2...
+157166720  (3S,4R,5R)-5-[(1R)-1,2-dihydroxyethyl]-3,4-dih...                   (3S,4R,5R)-5-[(1R)-1,2-dihydroxyethyl]-3,4-dih...
+157203503  (2R)-2-deuterio-2-[2-[[(2R)-2-deuterio-1-hydro...                   (2R)-2-deuterio-2-[2-[[(2R)-2-deuterio-1-hydro...
+...                                                      ...              ...                                                ...
+167637920  1,1-Dideuterio-2-(1-deuteriopropyldisulfanyl)e...                   1,1-dideuterio-2-(1-deuteriopropyldisulfanyl)e...
+167659025  1-Deuterio-2-(1-deuteriopropyldisulfanyl)ethan...                   1-deuterio-2-(1-deuteriopropyldisulfanyl)ethan...
+167665469  2-[(2-Amino-2,2-dideuterioethyl)disulfanyl]-1,...                   2-[(2-amino-2,2-dideuterioethyl)disulfanyl]-1,...
+167671658  (2R,3R,4S,5S,6S)-2,3,4,5-tetramethyl-6-propan-...                   (2R,3R,4S,5S,6S)-2,3,4,5-tetramethyl-6-propan-...
+173690959  (2S)-5-(15N)azanyl-2-(deuterio(15N)amino)-5-ox...  SCHEMBL18911567  (2S)-5-(15N)azanyl-2-(deuterio(15N)amino)-5-ox...
+
+[182 rows x 3 columns]
+
+>>> names[names['name'].str.len() > 350 | names['synonyms'].str.len() > 450].sample(100)
+---------------------------------------------------------------------------
+ValueError                                Traceback (most recent call last)
+<ipython-input-22-97a5c264267d> in ?()
+----> 1 names[names['name'].str.len() > 350 | names['synonyms'].str.len() > 450].sample(100)
+
+~/code/corethink/pubchem/.venv/lib/python3.12/site-packages/pandas/core/generic.py in ?(self)
+   1511     @final
+   1512     def __bool__(self) -> NoReturn:
+-> 1513         raise ValueError(
+   1514             f"The truth value of a {type(self).__name__} is ambiguous. "
+   1515             "Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+   1516         )
+
+ValueError: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+
+>>> names[(names['name'].str.len() > 350) | (names['synonyms'].str.len() > 500)].sample(100)
+Out[23]: 
+                                                       name                                           synonyms                                         iupac_name
+id                                                                                                                                                               
+25105635  (3R,4R,5R)-5-(Hydroxymethyl)piperidine-3,4-dio...  161302-93-8|Isofagomine, hydrochloride|AFEGOST...  (3R,4R,5R)-5-(hydroxymethyl)piperidine-3,4-dio...
+139901                       4-Hydroxy-3-methylbenzaldehyde  4-Hydroxy-3-methylbenzaldehyde|15174-69-3|Benz...                     4-hydroxy-3-methylbenzaldehyde
+44138                Ethyl N-2-acetoxyethylnitrosocarbamate  Ethyl N-2-acetoxyethylnitrosocarbamate|62681-1...      2-[ethoxycarbonyl(nitroso)amino]ethyl acetate
+2777241                2-(Trifluoromethoxy)benzoyl Chloride  2-(Trifluoromethoxy)benzoyl Chloride|162046-61...               2-(trifluoromethoxy)benzoyl chloride
+236603                                 Bromodiphenylmethane  Bromodiphenylmethane|776-74-9|Diphenylmethyl b...                       [bromo(phenyl)methyl]benzene
+...                                                     ...                                                ...                                                ...
+75630                  N,2-Dimethyl-N-nitroso-2-propanamine  tert-Butylmethylnitrosamine|2504-18-9|Methyl-t...                 N-tert-butyl-N-methylnitrous amide
+12609833  2-Amino-1-(thiophen-2-yl)ethan-1-one hydrochlo...  70996-65-5|2-amino-1-(thiophen-2-yl)ethan-1-on...      2-amino-1-thiophen-2-ylethanone;hydrochloride
+7977                                       2-Chloropyridine  2-CHLOROPYRIDINE|109-09-1|o-Chloropyridine|Pyr...                                   2-chloropyridine
+141685             2-Bromo-4,5-dimethoxyamphetamine, (A+-)-  Benzeneethanamine, 2-bromo-4,5-dimethoxy-alpha...      1-(2-bromo-4,5-dimethoxyphenyl)propan-2-amine
+45926056  2-(N,N-Dimethylamino)-2-(3-chlorophenyl)ethyla...  1189505-35-8|2-(N,N-DIMETHYLAMINO)-2-(3-CHLORO...  1-(3-chlorophenyl)-N,N-dimethylethane-1,2-diam...
+
+[100 rows x 3 columns]
+
+>>> for c, sep in dict(name=';', synonyms='|').items():
+...     names[c] = names[c].str.split(sep) 
+
+>>> count_names = names['name'].str.len()
+
+>>> count_names
+Out[26]: 
+id
+1            1
+2            1
+4            1
+5            1
+6            1
+            ..
+177896136    1
+177896172    1
+177896494    1
+177896512    1
+177896524    1
+Name: name, Length: 11835558, dtype: int64
+
+>>> count_names.max()
+Out[27]: np.int64(26)
+
+>>> count_synonyms = names['synonyms'].str.len()
+
+>>> count_synonyms.describe()
+Out[29]: 
+count    1.183556e+07
+mean     1.777211e+00
+std      3.808589e+00
+min      1.000000e+00
+25%      1.000000e+00
+50%      1.000000e+00
+75%      1.000000e+00
+max      7.820000e+02
+Name: synonyms, dtype: float64
+
+>>> count_names.describe()
+Out[30]: 
+count    1.183556e+07
+mean     1.193068e+00
+std      5.777590e-01
+min      1.000000e+00
+25%      1.000000e+00
+50%      1.000000e+00
+75%      1.000000e+00
+max      2.600000e+01
+Name: name, dtype: float64
