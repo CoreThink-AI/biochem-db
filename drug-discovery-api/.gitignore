@@ -1,0 +1,42 @@
+# Environment
+.env
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# Database files
+db/*.duckdb
+db/*.duckdb.wal
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+.docker/
+
+# Logs
+*.log
+logs/
