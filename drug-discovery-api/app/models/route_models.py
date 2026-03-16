@@ -1,3 +1,5 @@
+from enum import Enum
+
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 
@@ -172,3 +174,94 @@ class GetRoutesResponse(BaseModel):
         None,
         description="Informational message, e.g. when no ORD routes were found for this SMILES."
     )
+ 
+class SearchAlgorithm(str, Enum):
+    BEAM = "beam"
+    ASTAR = "astar"
+
+
+class AStarSearchStats(BaseModel):
+    target_smiles: str
+    max_depth: int
+    max_nodes: int = Field(..., description="Node expansion budget for A*")
+    per_node_limit: int
+    heuristic_weight: float = Field(
+        ..., description="Weight applied to open-molecule count in the heuristic h(n)"
+    )
+    top_k: int
+    runtime_seconds: float
+    nodes_explored: int
+    reactions_queried: int
+    routes_generated: int
+    states_pruned: int = Field(
+        ..., description="States skipped because a better score was already seen for the same open-molecule set"
+    )
+    avg_reactions_per_node: float
+ 
+class AlgorithmComparisonSummary(BaseModel):
+    faster_algorithm: SearchAlgorithm
+    beam_runtime_seconds: float
+    astar_runtime_seconds: float
+    time_diff_seconds: float
+
+    beam_routes_found: int
+    astar_routes_found: int
+    beam_complete_routes: int = Field(..., description="Routes with open_molecules == []")
+    astar_complete_routes: int
+
+    beam_best_score: Optional[float]
+    astar_best_score: Optional[float]
+    score_advantage: Optional[float] = Field(
+        None, description="astar_best_score − beam_best_score; positive means A* found a higher-scoring route"
+    )
+
+    beam_nodes_explored: int
+    astar_nodes_explored: int
+
+    recommendation: SearchAlgorithm
+    recommendation_reason: str
+
+
+class GetRoutesComparisonRequest(BaseModel):
+    smiles: str = Field(..., description="SMILES string of the target molecule", min_length=1)
+
+    max_depth: int = Field(4, ge=1, le=8, description="Maximum retrosynthetic depth for both algorithms")
+    per_node_limit: int = Field(200, ge=1, le=500, description="Max ORD reactions fetched per product SMILES")
+    top_k: int = Field(5, ge=1, le=25, description="Routes to return from each algorithm")
+    require_exactly_2_reactants: bool = Field(False)
+
+    beam_width: int = Field(25, ge=1, le=100, description="Candidate routes kept per depth level (beam search)")
+
+    max_nodes: int = Field(
+        500, ge=10, le=5000,
+        description="Maximum node expansions for A* (acts as search budget)"
+    )
+    heuristic_weight: float = Field(
+        0.5, ge=0.0, le=5.0,
+        description="Controls how strongly A* prefers states with fewer open molecules. "
+                    "0 = pure score-greedy; higher values push toward route completion faster."
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "smiles": "CC(=O)Oc1ccccc1C(=O)O",
+                "max_depth": 4,
+                "per_node_limit": 200,
+                "top_k": 5,
+                "beam_width": 25,
+                "max_nodes": 500,
+                "heuristic_weight": 0.5,
+            }
+        }
+    }
+
+
+class GetRoutesComparisonResponse(BaseModel):
+    molecule_smiles: str
+    beam_routes: List[ORDRoute] = Field(default_factory=list)
+    astar_routes: List[ORDRoute] = Field(default_factory=list)
+    beam_stats: Optional[ORDSearchStats] = None
+    astar_stats: Optional[AStarSearchStats] = None
+    comparison: AlgorithmComparisonSummary
+    note: Optional[str] = None

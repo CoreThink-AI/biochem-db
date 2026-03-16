@@ -176,3 +176,4 @@ cython_debug/
 .vscode
 
 notebooks/output/
+.DS_Store

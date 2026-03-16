@@ -1,3 +1,4 @@
+import heapq
 import requests
 import duckdb
 from dataclasses import dataclass, field, asdict
@@ -10,7 +11,6 @@ from datetime import datetime
 
 
 class Tee:
-    """Write to both stdout and a file simultaneously."""
     def __init__(self, file):
         self.file = file
         self.stdout = sys.stdout
@@ -38,24 +38,20 @@ def default_step_score(row: Dict[str, Any], reactants: List[str]) -> float:
     t = row.get("temperature_c")
     safety = row.get("notes_safety")
 
-    # least no of reactants 
     score -= 0.6 * max(0, len(reactants) - 2)
 
-    # prefer higher yield
     if y is not None:
         try:
             score += 0.03 * float(y)
         except Exception:
             pass
 
-    # lower temperature (minus above 25C)
     if t is not None:
         try:
             score -= 0.01 * max(0.0, float(t) - 25.0)
         except Exception:
             pass
 
-    # safety penalty (very rough)
     if safety and str(safety).strip():
         score -= 0.5
 
@@ -148,6 +144,44 @@ class SearchStats:
             "routes_generated": self.routes_generated,
             "avg_reactions_per_node": self.reactions_queried / max(1, self.nodes_explored)
         }
+
+@dataclass
+class AStarSearchStats:
+    target_smiles: str
+    max_depth: int
+    max_nodes: int
+    per_node_limit: int
+    heuristic_weight: float
+    start_time: float = field(default_factory=time.time)
+    end_time: Optional[float] = None
+    nodes_explored: int = 0
+    reactions_queried: int = 0
+    routes_generated: int = 0
+    states_pruned: int = 0
+
+    def finish(self):
+        self.end_time = time.time()
+
+    def runtime_seconds(self) -> float:
+        if self.end_time:
+            return self.end_time - self.start_time
+        return time.time() - self.start_time
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "target_smiles": self.target_smiles,
+            "max_depth": self.max_depth,
+            "max_nodes": self.max_nodes,
+            "per_node_limit": self.per_node_limit,
+            "heuristic_weight": self.heuristic_weight,
+            "runtime_seconds": self.runtime_seconds(),
+            "nodes_explored": self.nodes_explored,
+            "reactions_queried": self.reactions_queried,
+            "routes_generated": self.routes_generated,
+            "states_pruned": self.states_pruned,
+            "avg_reactions_per_node": self.reactions_queried / max(1, self.nodes_explored),
+        }
+
 
 class OrdRetroSynth:
     def __init__(self, duckdb_path: str = "retrosynthesis.duckdb"):
@@ -339,6 +373,153 @@ class OrdRetroSynth:
         
         return best_route, selection_reasoning
 
+class AStarRetroSynth(OrdRetroSynth):
+    """A* retrosynthesis search """
+
+    def __init__(self, duckdb_path: str = "retrosynthesis.duckdb"):
+        super().__init__(duckdb_path)
+        self.astar_stats: Optional[AStarSearchStats] = None
+
+    def build_routes_astar(
+        self,
+        target_smiles: str,
+        max_depth: int = 4,
+        max_nodes: int = 500,
+        per_node_limit: int = 200,
+        top_k: int = 5,
+        heuristic_weight: float = 0.5,
+        require_exactly_2_reactants: bool = False,
+        stop_if_in_stock: Optional[set] = None,
+        scorer=default_step_score,
+    ) -> List[Route]:
+        self.astar_stats = AStarSearchStats(
+            target_smiles=target_smiles,
+            max_depth=max_depth,
+            max_nodes=max_nodes,
+            per_node_limit=per_node_limit,
+            heuristic_weight=heuristic_weight,
+        )
+        # Route candidates_for_product (inherited) through self.stats so reactions_queried is tracked
+        self.stats = self.astar_stats
+
+        def _priority(route: Route) -> float:
+            # min-heap: negate because we want to maximise (score - penalty for open mols)
+            return -(route.score - heuristic_weight * len(route.open_molecules))
+
+        initial = Route(
+            target_smiles=target_smiles,
+            steps=[],
+            open_molecules=[target_smiles],
+            score=0.0,
+        )
+
+        counter = 0
+        heap: List[Tuple] = [(_priority(initial), counter, initial)]
+
+        visited: Dict[frozenset, float] = {}
+
+        complete_routes: List[Route] = []
+        partial_routes: List[Route] = []
+
+        while heap and self.astar_stats.nodes_explored < max_nodes:
+            _, _, current = heapq.heappop(heap)
+
+            if not current.open_molecules:
+                complete_routes.append(current)
+                if len(complete_routes) >= top_k:
+                    break
+                continue
+
+            if len(current.steps) >= max_depth:
+                if current.steps:
+                    partial_routes.append(current)
+                continue
+
+            state_key = frozenset(current.open_molecules)
+            if state_key in visited and visited[state_key] >= current.score:
+                self.astar_stats.states_pruned += 1
+                continue
+            visited[state_key] = current.score
+
+            self.astar_stats.nodes_explored += 1
+
+            if stop_if_in_stock is not None and all(
+                m in stop_if_in_stock for m in current.open_molecules
+            ):
+                complete_routes.append(current)
+                continue
+
+            product = current.open_molecules[0]
+            remaining = current.open_molecules[1:]
+
+            rows = self.candidates_for_product(product, limit=per_node_limit)
+            if not rows:
+                if current.steps:
+                    partial_routes.append(current)
+                continue
+
+            for row in rows:
+                reactants = row.get("reactants", [])
+                if isinstance(reactants, str):
+                    reactants = split_smiles_set(reactants)
+                elif not isinstance(reactants, list):
+                    reactants = list(reactants) if hasattr(reactants, "__iter__") else []
+
+                if not reactants:
+                    continue
+                if require_exactly_2_reactants and len(reactants) != 2:
+                    continue
+
+                step_sc = scorer(row, reactants)
+
+                step = Step(
+                    reaction_id=row["reaction_id"],
+                    product_smiles=product,
+                    reactants=reactants,
+                    source=row.get("source"),
+                    dataset_id=row.get("dataset_id"),
+                    dataset_name=row.get("dataset_name"),
+                    yield_pct=row.get("yield_pct"),
+                    temperature_c=row.get("temperature_c"),
+                    pressure_atm=row.get("pressure_atm"),
+                    stirring_rpm=row.get("stirring_rpm"),
+                    reagent_smiles=row.get("reagent_smiles"),
+                    solvent_smiles=row.get("solvent_smiles"),
+                    catalyst_smiles=row.get("catalyst_smiles"),
+                    doi=row.get("doi"),
+                    publication_year=row.get("publication_year"),
+                    notes_safety=row.get("notes_safety"),
+                    notes_procedure=row.get("notes_procedure"),
+                    step_score=step_sc,
+                )
+
+                new_route = Route(
+                    target_smiles=current.target_smiles,
+                    steps=current.steps + [step],
+                    open_molecules=remaining + reactants,
+                    score=current.score + step_sc,
+                )
+                counter += 1
+                heapq.heappush(heap, (_priority(new_route), counter, new_route))
+                self.astar_stats.routes_generated += 1
+
+        self.astar_stats.finish()
+
+        result = list(complete_routes)
+        if len(result) < top_k:
+            partial_routes.sort(key=lambda r: r.score, reverse=True)
+            result += partial_routes[: top_k - len(result)]
+        if len(result) < top_k:
+            heap_routes = sorted(
+                [item[2] for item in heap if item[2].steps],
+                key=lambda r: r.score,
+                reverse=True,
+            )
+            result += heap_routes[: top_k - len(result)]
+
+        return result[:top_k]
+
+
 def routes_to_pretty_json(routes: List[Route], top_k: int = 5) -> str:
     def r_to_dict(r: Route) -> Dict[str, Any]:
         metrics = r.get_metrics()
@@ -439,7 +620,6 @@ def run_targets(
                 raise KeyboardInterrupt() from e
             raise
 
-        # only keep routes that have actual steps
         routes = [r for r in routes if r.steps]
 
         print(f"Found {len(routes)} routes for {name}\n")

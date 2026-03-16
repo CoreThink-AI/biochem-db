@@ -1,7 +1,12 @@
 from fastapi import APIRouter, HTTPException, status
 
-from app.models.route_models import GetRoutesRequest, GetRoutesResponse
-from app.services.route_service import generate_routes
+from app.models.route_models import (
+    GetRoutesComparisonRequest,
+    GetRoutesComparisonResponse,
+    GetRoutesRequest,
+    GetRoutesResponse,
+)
+from app.services.route_service import generate_comparison, generate_routes
 
 router = APIRouter(prefix="/get-routes", tags=["Routes"])
 
@@ -10,57 +15,7 @@ router = APIRouter(prefix="/get-routes", tags=["Routes"])
     "",
     response_model=GetRoutesResponse,
     summary="Find retrosynthesis routes from the ORD database",
-    description="""
-Identify synthesis pathways for a target molecule by running a **beam-search
-over 2.37 million reactions** in the Open Reaction Database (ORD) stored locally
-in DuckDB.
-
-### How depth works
-
-```
-depth 0  →  target SMILES
-depth 1  →  reactions whose product == target  (direct precursors)
-depth 2  →  reactions for each depth-1 precursor
-depth N  →  continues recursively up to max_depth
-```
-
-Each distinct pathway through the search tree is returned as one **ORDRoute**.
-Routes are ranked by a composite scorer (yield · temperature · step count ·
-safety · completeness).  The top-scoring route is flagged `is_best: true`.
-
-### Key request parameters
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `max_depth` | 4 | Maximum recursive depth |
-| `beam_width` | 25 | Candidate routes kept per depth level |
-| `per_node_limit` | 200 | Max ORD reactions fetched per product SMILES |
-| `top_k` | 5 | Routes returned in the response |
-| `require_exactly_2_reactants` | false | Restrict to bimolecular reactions only |
-
-### Per-step fields
-
-Every step in a route includes:
-- `reaction_id` — ORD reaction identifier
-- `product_smiles` / `reactants` — SMILES (the reaction itself)
-- `reagent_smiles` / `solvent_smiles` / `catalyst_smiles` — conditions
-- `yield_pct` / `temperature_c` — quantitative data where available
-- `doi` + `doi_url` — source publication DOI
-- `google_scholar_url` — pre-built `scholar.google.com/scholar?q=doi:…` link
-- `notes_procedure` — full experimental procedure text from ORD
-- `depth` — which retrosynthetic level this step sits at (1 = closest to target)
-
-### `open_molecules`
-
-Molecules in this list still need a synthesis route — they were not resolved
-within the given `max_depth`.  An empty list means the route is **complete**
-(`is_complete: true`).
-
-### `search_stats`
-
-Runtime diagnostics: nodes explored, reactions queried, total routes
-generated before pruning, and wall-clock time.
-""",
+    description="""searches for retrosynthesis routes from the ORD database""",
 )
 async def get_routes(request: GetRoutesRequest) -> GetRoutesResponse:
     try:
@@ -81,4 +36,84 @@ async def get_routes(request: GetRoutesRequest) -> GetRoutesResponse:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Route generation failed: {exc}",
+        )
+
+
+@router.post(
+    "/compare",
+    response_model=GetRoutesComparisonResponse,
+    summary="Compare beam-search vs A* retrosynthesis routes",
+    description="""compares beam-search vs A* retrosynthesis routes""",
+    openapi_extra={
+        "responses": {
+            "200": {
+                "content": {
+                    "application/json": {
+                        "example": {
+                            "molecule_smiles": "CC(=O)Oc1ccccc1C(=O)O",
+                            "beam_routes": ["... top-K ORDRoute objects ..."],
+                            "astar_routes": ["... top-K ORDRoute objects ..."],
+                            "beam_stats": {
+                                "target_smiles": "CC(=O)Oc1ccccc1C(=O)O",
+                                "max_depth": 4,
+                                "beam_width": 25,
+                                "per_node_limit": 200,
+                                "top_k": 5,
+                                "runtime_seconds": 1.842,
+                                "nodes_explored": 98,
+                                "reactions_queried": 98,
+                                "routes_generated": 4312,
+                                "avg_reactions_per_node": 44.0,
+                            },
+                            "astar_stats": {
+                                "target_smiles": "CC(=O)Oc1ccccc1C(=O)O",
+                                "max_depth": 4,
+                                "max_nodes": 500,
+                                "per_node_limit": 200,
+                                "heuristic_weight": 0.5,
+                                "top_k": 5,
+                                "runtime_seconds": 3.217,
+                                "nodes_explored": 500,
+                                "reactions_queried": 500,
+                                "routes_generated": 18420,
+                                "states_pruned": 312,
+                                "avg_reactions_per_node": 36.8,
+                            },
+                            "comparison": {
+                                "faster_algorithm": "beam",
+                                "beam_runtime_seconds": 1.842,
+                                "astar_runtime_seconds": 3.217,
+                                "time_diff_seconds": 1.375,
+                                "beam_routes_found": 5,
+                                "astar_routes_found": 5,
+                                "beam_complete_routes": 2,
+                                "astar_complete_routes": 3,
+                                "beam_best_score": 2.15,
+                                "astar_best_score": 2.48,
+                                "score_advantage": 0.33,
+                                "beam_nodes_explored": 98,
+                                "astar_nodes_explored": 500,
+                                "recommendation": "astar",
+                                "recommendation_reason": "A* found 3 complete routes vs 2 for beam; A* best score 2.48 > beam 2.15",
+                            },
+                            "note": None,
+                        }
+                    }
+                }
+            }
+        }
+    },
+)
+async def compare_routes(request: GetRoutesComparisonRequest) -> GetRoutesComparisonResponse:
+    try:
+        return await generate_comparison(request)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Comparison search failed: {exc}",
         )
