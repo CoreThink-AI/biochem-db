@@ -5,6 +5,7 @@ description = "Biochem Database for evaluation of retrosynthesis and chemical re
 readme = "README.md"
 authors = [
     { name = "corethink", email = "hobson@corethink.ai" }
+    ]
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "jsonlines",
