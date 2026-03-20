@@ -5,6 +5,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine, MetaData, Table, Column, ForeignKey
 from sqlalchemy.ext.automap import automap_base
 from sqlalchemy import text, select
+from .models import CompoundComplexity
 
 logging.basicConfig()
 logsql = logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
@@ -35,7 +36,7 @@ def automap_models(engine=ENGINE):
         models[name] = globals()[name]
     return models
 
-def select_df
+def select_df():
     stmnt = select(CompoundComplexity).where(CompoundComplexity.id == "1983")
 
 def select_df_clunky(
@@ -51,23 +52,25 @@ def select_df_clunky(
     if not where[0]:
         where = []
     if id:
-        where = [f'id = {id}']
+        where += [f'id = {id}']
     if cid:
-        where = [f'cid = {cid}']
+        where += [f'cid = {cid}']
     if name:
-        where += [f'name = {name}']
+        where += [f'name = \'{name}\'']
     if smiles:
         where += [f'smiles = {smiles}']
     if not columns or '*' in columns:
         columns = ['*']
-    selection
+    if not where:
+        where += ['id >= 0']
     with ENGINE.connect() as connection:
         table = list(
             connection.execute(
                 text(
                     f'SELECT {",".join(columns)}'
                     + f' FROM {table}'
-                    + f' WHERE {" AND ".join([clause for clause in where if clause])} '
+                    + f' WHERE'
+                    + f' {" AND ".join([clause for clause in where if clause])}' 
                     + f' LIMIT {limit}'
                     + ' ;'
                     )
