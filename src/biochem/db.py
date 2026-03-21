@@ -36,10 +36,10 @@ def automap_models(engine=ENGINE):
         models[name] = globals()[name]
     return models
 
-def select_df():
-    stmnt = select(CompoundComplexity).where(CompoundComplexity.id == "1983")
+def select_df_orm():
+    stmnt = select(CompoundComplexity).where(CompoundComplexity.id in [1983, 10297])
 
-def select_df_clunky(
+def select_df(
         table='compound_complexity',
         columns='id cid name smiles complexity synonyms'.split(),
         id=None, 
@@ -77,7 +77,7 @@ def select_df_clunky(
                 ).all()
             )
     if '*' in columns:
-        columns = range(40)
+        columns = None
     dfsql = pd.DataFrame(table, columns=columns)
     if len(dfsql) and 'id' in dfsql.columns:
         dfsql = dfsql.set_index('id', drop=True)

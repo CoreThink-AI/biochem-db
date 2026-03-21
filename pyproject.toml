@@ -8,11 +8,13 @@ authors = [
     ]
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "editdistance>=0.8.1",
     "jsonlines",
     "molid>=0.8.4",
     "pandas",
     "rdkit",
     "requests",
+    "spacy>=3.8.11",
 ]
 
 [project.optional-dependencies]
