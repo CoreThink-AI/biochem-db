@@ -9,12 +9,16 @@ authors = [
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "editdistance>=0.8.1",
+    "ipython>=9.11.0",
     "jsonlines",
     "molid>=0.8.4",
     "pandas",
+    "pip>=26.0.1",
+    "pubchempy>=1.0.5",
     "rdkit",
     "requests",
     "spacy>=3.8.11",
+    "sqlalchemy[asyncio,postgresql-psycopg2binary,sqlcipher]>=2.0.48",
 ]
 
 [project.optional-dependencies]
