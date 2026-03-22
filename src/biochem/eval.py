@@ -15,8 +15,9 @@ def get_compound_dict(cid):
     """ Query PubChem API to retrieve compound record as a dictionary """
     compound = pc.Compound.from_cid(cid)
     compound_dict = {k: getattr(compound, k) for k in dir(compound) if k in ['_record'] or not k.startswith('_')}
-    compound_dict.update({pubchem2reasoner_dict.get(k, k): getattr(compound, k) for k in dir(compound) if not k.startswith('_')})
+    # compound_dict.update({pubchem2reasoner_dict.get(k, k): getattr(compound, k) for k in dir(compound) if not k.startswith('_')})
     compound_dict['_record'] = compound._record
+    return compound_dict
 
 
 def get_compound_dict_from_db(cid):
@@ -54,29 +55,50 @@ def get_cid_paths(base_dir=CID_DIR):
     return [int(p.name.split('_')[-1]) for p in Path(base_dir).glob('CID_*')]
 
 
-def dict_edit_distances(m, m_):
+def dict_edit_distances(m, pubchem_molecule):
+    # zip(dir(pubchempy.Compound), response['molecule']))
+    map_schema_reasoner2pubchem = {
+        'name': 'name',
+        'molecularWeight': 'molecular_weight',
+        'smiles': 'connectivity_smiles',
+        'yield': 'estimated_yield',
+        # 'smiles': 'isomeric_smiles',
+    }
+    for k in m:
+        map_schema_reasoner2pubchem[k] = camelcase_to_snake_case(k)
+        map_schema_reasoner2pubchem[homogenize(k)] = camelcase_to_snake_case(k)
+    
     distances = {}
-    for k in m_:
+    annotations ={}
+    for k, guess in m.items():
         if k.startswith('_') and k not in ['_record']:
             continue
-        if k in m:
-            distances[k] = distance(str(m_[k]), str(m[k]))
-            r['molecule'][k+'_'] = m_[k]  # record the truth in the reasoner response dict
-    return distances
-    truth = {'molecule': m_}
-    report = dict(distances=distances)
-
-def dict_edit_distances_pubchem(m, m_):
-    for k in m_:
-        if k in m:
-            r['molecule'][k+'_'] = compound_dict[k]  # record the truth in the reasoner response dict
-            pubchem_distances[k] = distance(str(compound_dict[k]), str(m[k]))
-        elif k in r:
-            r[k+'_'] = compound_dict[k]  # record the truth in the reasoner response dict
-            pubchem_distances[k] = distance(str(compound_dict[k]), str(r[k]))
-        else:
+        k_pubchem = map_schema_reasoner2pubchem[k]
+        if not k_pubchem in pubchem_molecule:
             continue
-        r['molecule'][k+'_'] = compound_dict[k]
+        truth = pubchem_molecule[k_pubchem]
+        distances[k_pubchem] = distance(str(truth), str(guess))
+        annotations[k + '_'] = truth  # record the truth in the reasoner response dict
+    m.update(annotations)
+    report = dict(
+        distances={k: distances[k] for k in sorted(distances.keys())},
+        molecule={k: m[k] for k in sorted(m.keys())},
+    )
+    return report
+
+
+# def dict_edit_distances_pubchem(m, m_):
+#     for k in m_:
+#         if k in m:
+#             r['molecule'][k+'_'] = compound_dict[k]  # record the truth in the reasoner response dict
+#             pubchem_distances[k] = distance(str(compound_dict[k]), str(m[k]))
+#         elif k in r:
+#             r[k+'_'] = compound_dict[k]  # record the truth in the reasoner response dict
+#             pubchem_distances[k] = distance(str(compound_dict[k]), str(r[k]))
+#         else:
+#             continue
+#         r['molecule'][k+'_'] = compound_dict[k]
+#     return r
 
 
 
@@ -102,29 +124,27 @@ def evaluate(cid=10297, with_ord=None):
         reasoning =  reasoning.parent / 'base_reasoner+ord.json'
     if isinstance(reasoning, (Path, str)):
         reasoning = json.load(open(reasoning))
-    r = reasoning['response']
+    cot = reasoning['response']
     if cid is None:
         cid = reasoning['cid']
     cid = int(cid)
     
-    # zip(dir(pubchempy.Compound), response['molecule']))
-    map_schema_pubchem2reasoner = [
-        ('name', 'compound_name'),
-        ('molecular_weight', 'molecularWeight'),
-        ('smiles', 'connectivity_smiles'),
-        ('smiles', 'isomeric_smiles'),
-    ]
     # map_schema_reasoner2pubchem = [(v, k) for (k, v) in map map_schema_pubchem2reasoner]
     compound_dict = get_compound_dict(cid=cid)
-    truth['molecule'] = compound_dict
-    map_schema_pubchem2reasoner += [(camelcase_to_snake_case(k), k) for k in compound_dict]
-    pubchem2reasoner_dict = dict(map_schema_pubchem2reasoner)
-
-    pubchem_distances = dict_edit_distances(r['molecule'], truth['molecule'])
-
-    report['pubchem_distances'] = pubchem_distances
-    print(report)
-    return dict(truth=truth, report=report, response=r)
+    # print(json.dumps(compound_dict, indent=4))
+    report = dict_edit_distances(cot['molecule'], compound_dict)
+    report['cot'] = {k: cot[k] for k in sorted(cot)}
+    report['cot']['prompts'] = prompts = [{p[k] for k in sorted(p)} for p in report['response']['prompts']]
+    responses = []
+    for p in prompts:
+        r = json.loads(p['response'])
+        responses.append({k: r[k] for k in sorted(r)})
+    report['reasoner_response'] = json.loads(prompts[-1]['response'])
+    final_response = json.loads(report['cot']['prompts'][-1]['response']), indent=4))
+    print(json.dumps(report, indent=4))
+    print('='*80)
+    print(json.dumps(report['distances'], indent=4))
+    return report
 
 
 if __name__ == '__main__':
