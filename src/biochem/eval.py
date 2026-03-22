@@ -1,5 +1,5 @@
 from biochem.constants import CID_DIR
-# from biochem.db import select_df
+from biochem.db import select_df
 from editdistance import distance
 from pathlib import Path
 import pubchempy as pc
@@ -9,20 +9,6 @@ import logging
 
 CRE_CAPITAL_CHAR = re.compile("[A-Z]")
 log = logging.getLogger()
-
-
-def get_compound_dict(cid):
-    """ Query PubChem API to retrieve compound record as a dictionary """
-    compound = pc.Compound.from_cid(cid)
-    compound_dict = {k: getattr(compound, k) for k in dir(compound) if k in ['_record'] or not k.startswith('_')}
-    compound_dict.update({pubchem2reasoner_dict.get(k, k): getattr(compound, k) for k in dir(compound) if not k.startswith('_')})
-    compound_dict['_record'] = compound._record
-
-
-def get_compound_dict_from_db(cid):
-    df = select_df(columns=None, limit=10, id=cid)
-    return df.iloc[0].to_dict()
-
 
 
 def homogenize(name):
@@ -54,32 +40,6 @@ def get_cid_paths(base_dir=CID_DIR):
     return [int(p.name.split('_')[-1]) for p in Path(base_dir).glob('CID_*')]
 
 
-def dict_edit_distances(m, m_):
-    distances = {}
-    for k in m_:
-        if k.startswith('_') and k not in ['_record']:
-            continue
-        if k in m:
-            distances[k] = distance(str(m_[k]), str(m[k]))
-            r['molecule'][k+'_'] = m_[k]  # record the truth in the reasoner response dict
-    return distances
-    truth = {'molecule': m_}
-    report = dict(distances=distances)
-
-def dict_edit_distances_pubchem(m, m_):
-    for k in m_:
-        if k in m:
-            r['molecule'][k+'_'] = compound_dict[k]  # record the truth in the reasoner response dict
-            pubchem_distances[k] = distance(str(compound_dict[k]), str(m[k]))
-        elif k in r:
-            r[k+'_'] = compound_dict[k]  # record the truth in the reasoner response dict
-            pubchem_distances[k] = distance(str(compound_dict[k]), str(r[k]))
-        else:
-            continue
-        r['molecule'][k+'_'] = compound_dict[k]
-
-
-
 def evaluate(cid=10297, with_ord=None):
     if cid is None:
         cid = get_cid_paths()
@@ -106,6 +66,20 @@ def evaluate(cid=10297, with_ord=None):
     if cid is None:
         cid = reasoning['cid']
     cid = int(cid)
+    df = select_df(columns=None, limit=10, id=cid)
+    m_ = df.iloc[0].to_dict()
+    
+    truth = {'molecule': m_}
+    distances = {}
+    m = r['molecule']
+    for k in m_:
+        if k in m:
+            distances[k] = distance(str(m_[k]), str(m[k]))
+            r['molecule'][k+'_'] = m_[k]  # record the truth in the reasoner response dict
+        if k in r:
+            distances[k] = distance(str(m_[k]), str(r[k]))
+            r[k+'_'] = m_[k]  # record the truth in the reasoner response dict
+    report = dict(distances=distances)
     
     # zip(dir(pubchempy.Compound), response['molecule']))
     map_schema_pubchem2reasoner = [
@@ -114,13 +88,31 @@ def evaluate(cid=10297, with_ord=None):
         ('smiles', 'connectivity_smiles'),
         ('smiles', 'isomeric_smiles'),
     ]
+    map_schema_pubchem2reasoner += [(camelcase_to_snake_case(k), k)]
+    pubchem2reasoner_dict = dict(map_schema_pubchem2reasoner) 
     # map_schema_reasoner2pubchem = [(v, k) for (k, v) in map map_schema_pubchem2reasoner]
-    compound_dict = get_compound_dict(cid=cid)
-    truth['molecule'] = compound_dict
-    map_schema_pubchem2reasoner += [(camelcase_to_snake_case(k), k) for k in compound_dict]
-    pubchem2reasoner_dict = dict(map_schema_pubchem2reasoner)
+    compound = pc.Compound.from_cid(cid)
+    compound_dict = {k: getattr(compound, k) for k in dir(compound) if k in ['_record'] or not k.startswith('_')}
+    compound_dict.update({pubchem2reasoner_dict.get(k, k): getattr(compound, k) for k in dir(compound) if not k.startswith('_')})
+    compound_dict['_record'] = compound._record
 
-    pubchem_distances = dict_edit_distances(r['molecule'], truth['molecule'])
+    truth['molecule'].update(compound_dict)
+
+
+    truth['pubchem'] = compound_dict
+    pubchem_distances = {}
+    for k in compound_dict:
+        if k.startswith('_') and k not in ['_record']:
+            continue
+        if k in m:
+            r['molecule'][k+'_'] = compound_dict[k]  # record the truth in the reasoner response dict
+            pubchem_distances[k] = distance(str(compound_dict[k]), str(m[k]))
+        elif k in r:
+            r[k+'_'] = compound_dict[k]  # record the truth in the reasoner response dict
+            pubchem_distances[k] = distance(str(compound_dict[k]), str(r[k]))
+        else:
+            continue
+        r['molecule'][k+'_'] = compound_dict[k]
 
     report['pubchem_distances'] = pubchem_distances
     print(report)
