@@ -4,7 +4,7 @@ input
   "heuristic_weight": 0.5,
   "max_depth": 8,
   "max_nodes": 500,
-  "per_node_limit": 200,
+  "per_node_limit": 500,
   "smiles": "CC1(COC(=O)C1=O)C",
   "top_k": 25
 }
