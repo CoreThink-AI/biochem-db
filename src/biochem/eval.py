@@ -1,6 +1,6 @@
 from biochem.constants import CID_DIR
 # from biochem.db import select_df
-from editdistance import distance
+from pyxdameraulevenshtein import normalized_damerau_levenshtein_distance as normalized_distance
 from pathlib import Path
 import pubchempy as pc
 import json
@@ -77,7 +77,7 @@ def dict_edit_distances(m, pubchem_molecule):
         if not k_pubchem in pubchem_molecule:
             continue
         truth = pubchem_molecule[k_pubchem]
-        distances[k_pubchem] = distance(str(truth), str(guess))
+        distances[k_pubchem] = normalized_distance(str(truth), str(guess))
         annotations[k + '_'] = truth  # record the truth in the reasoner response dict
     m.update(annotations)
     report = dict(
@@ -133,18 +133,40 @@ def evaluate(cid=10297, with_ord=None):
     compound_dict = get_compound_dict(cid=cid)
     # print(json.dumps(compound_dict, indent=4))
     report = dict_edit_distances(cot['molecule'], compound_dict)
+    report['pubchem_report'] = compound_dict
     report['cot'] = {k: cot[k] for k in sorted(cot)}
-    report['cot']['prompts'] = prompts = [{p[k] for k in sorted(p)} for p in report['response']['prompts']]
+    report['cot']['prompts'] = prompts = [{k: p[k] for k in sorted(p)} for p in report['cot']['prompts']]
     responses = []
-    for p in prompts:
-        r = json.loads(p['response'])
+
+    for i, p in enumerate(prompts):
+        print(i, type(p), len(p), p.keys())
+        r = json.dumps(p['response'], indent=4)
         responses.append({k: r[k] for k in sorted(r)})
     report['reasoner_response'] = json.loads(prompts[-1]['response'])
-    final_response = json.loads(report['cot']['prompts'][-1]['response']), indent=4))
+    final_response = json.loads(report['cot']['prompts'][-1]['response'])
     print(json.dumps(report, indent=4))
     print('='*80)
     print(json.dumps(report['distances'], indent=4))
     return report
+
+
+def review_cot(cid):
+    results = evaluate(cid=10297)
+    print(dumps(report['response']['prompts'][-1]['response'], indent=4))
+    print(json.dumps(report['response']['prompts'][-1]['response'], indent=4))
+    print(json.loads(report['response']['prompts'][-1]['response']))
+    print(json.dumps(json.loads(report['response']['prompts'][-1]['response']), indent=4))
+    report['response']['prompts'][-1].keys()
+    report['response']['prompts'][-1]['user_prompt']
+    smiles = ""
+    print(f"=== CID {cid} == {smiles} ==" + "=" * (80 - len(smiles)))
+    for i, p in enumerate(report['response']['prompts']):
+        print(f"=== HUMAN PROMPT {i:2d}" + "=" * 82)
+        print(p['user_prompt'])
+        print(f"----- LLM response {i:2d}" + "-" * 80)
+    for p in report['response']['prompts']:
+        print(p['user_prompt'])
+
 
 
 if __name__ == '__main__':

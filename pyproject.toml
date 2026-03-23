@@ -15,6 +15,7 @@ dependencies = [
     "pandas",
     "pip>=26.0.1",
     "pubchempy>=1.0.5",
+    "pyxdameraulevenshtein>=1.10.0",
     "rdkit",
     "requests",
     "spacy>=3.8.11",
