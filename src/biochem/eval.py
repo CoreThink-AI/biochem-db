@@ -138,14 +138,15 @@ def evaluate(cid=10297, with_ord=None):
     report['cot']['prompts'] = prompts = [{k: p[k] for k in sorted(p)} for p in report['cot']['prompts']]
     responses = []
 
-    for i, p in enumerate(prompts):
-        print(i, type(p), len(p), p.keys())
-        r = json.dumps(p['response'], indent=4)
-        responses.append({k: r[k] for k in sorted(r)})
+    # for i, p in enumerate(prompts):
+    #     print(i, type(p), len(p), p.keys())
+    #     r = p['response']
+    #     responses.append({k: r[k] for k in sorted(r)})
+    #     # r = json.dumps(p['response'], indent=4)
     report['reasoner_response'] = json.loads(prompts[-1]['response'])
     final_response = json.loads(report['cot']['prompts'][-1]['response'])
-    print(json.dumps(report, indent=4))
-    print('='*80)
+    # print(json.dumps(report, indent=4))
+    print(f'== {cid} = {report["pubchem_report"]['connectivity_smiles']}' '='*80)
     print(json.dumps(report['distances'], indent=4))
     return report
 
@@ -170,15 +171,18 @@ def review_cot(cid):
 
 
 if __name__ == '__main__':
-    cid_dirs = list(CID_DIR.glob('CID_1029*'))
-    pairs = []
-    for cid_dir in cid_dirs:
-        pairs.append(( 
-            json.load(open(cid_dir / 'base_reasoner.json')),
-            json.load(open(cid_dir / 'base_reasoner+ord.json'))
-            ))
-        pairs[-1][0]['cid'] = int(cid_dir.name.split('_')[-1])
-    evals = []
-    for p in pairs:
-        evals.append(evaluate(p[0]), evaluate(p[1]))
+    report = evaluate(None)
+    report = evaluate(None, with_ord=)
+    
+    # cid_dirs = list(CID_DIR.glob('CID_1029*'))
+    # pairs = []
+    # for cid_dir in cid_dirs:
+    #     pairs.append(( 
+    #         json.load(open(cid_dir / 'base_reasoner.json')),
+    #         json.load(open(cid_dir / 'base_reasoner+ord.json'))
+    #         ))
+    #     pairs[-1][0]['cid'] = int(cid_dir.name.split('_')[-1])
+    # evals = []
+    # for p in pairs:
+    #     evals.append(evaluate(p[0]), evaluate(p[1]))
 
