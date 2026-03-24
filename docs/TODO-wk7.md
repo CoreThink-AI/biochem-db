@@ -5,15 +5,17 @@
 
 ### Hobson
 1. [x] experiment-1 branch on biochem-db
-1. [ ] in eval.py fix pubchempy api calls that return objects that can't be serialized; use puchem API directly with requests with header: "accept: application/json"
+1. [x] in eval.py fix pubchempy api calls that return objects that can't be serialized; use puchem API directly with requests with header: "accept: application/json"
 1. [x] add make_serializable() to eval.py
-1. [ ] in eval.py create function to output formatted NL markdown report of prompt-response pairs for CID 10297 and share with Akhil on slack
+1. [x] in eval.py create function to output formatted NL markdown report of prompt-response pairs for CID 10297 and share with Akhil on slack
+
 1. [ ] try to run Akhil's experiment-1 code for a small set of molecules (need AWS keys; and LLM key though openrouter will probably work)
 
-1. manually add more compound key-pairs to editdistance calculation
-1. add normalization of smiles to eval.py
-1. improve automatic pairing of dict keys between pubchem json and generated json from zydus-reasoner LLM response schema
-1. help akhil add NxN edit distance metric on reactants, finding pairing between two lists and ignoring others in accuracy/error score
+1. [ ] manually add more compound key-pairs to editdistance calculation
+1. [ ] improve automatic pairing of dict keys between pubchem json and generated json from zydus-reasoner LLM response schema
+
+1. [ ] add normalization of smiles to eval.py
+1. [ ] (with akhil?) add NxN edit distance metric on reactants, finding pairing between two lists and ignoring others in accuracy/error score
 1. find Manufacturing section on pubchem for 10297 and add function in eval.py function to retrieve it
 1. include manufacturing text for all 62 CIDs in `report.json` files in CID folders
 
