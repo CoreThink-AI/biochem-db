@@ -1,11 +1,14 @@
+""" Directly queries pubchem API rather (using `src/biochem/pubchem` than local PostgreSQL database (using `src/biochem/db.py`) so that anyone can use it """ 
 from biochem.constants import CID_DIR
-# from biochem.db import select_df
 from pyxdameraulevenshtein import normalized_damerau_levenshtein_distance as normalized_distance
 from pathlib import Path
+# TODO: Use https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest#section=URL-based-API to get molecule data in serializable dictionaries rather than unserializable pubchempy objects
 import pubchempy as pc
 import json
 import re
 import logging
+
+
 
 CRE_CAPITAL_CHAR = re.compile("[A-Z]")
 log = logging.getLogger()
@@ -171,8 +174,8 @@ def review_cot(cid):
 
 
 if __name__ == '__main__':
-    report = evaluate(None)
-    report = evaluate(None, with_ord=)
+    report_baseline = evaluate(None)
+    report_ord = evaluate(None, with_ord=True)
     
     # cid_dirs = list(CID_DIR.glob('CID_1029*'))
     # pairs = []
