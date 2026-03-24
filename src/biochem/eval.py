@@ -14,14 +14,44 @@ CRE_CAPITAL_CHAR = re.compile("[A-Z]")
 log = logging.getLogger()
 
 
-def get_compound_dict(cid):
-    """ Query PubChem API to retrieve compound record as a dictionary """
+def get_compound_dict_pubchempy(cid):
+    """ FIXME: use HTTP REST instead of pubchempy used here Query PubChem API to retrieve compound record as a dictionary """
     compound = pc.Compound.from_cid(cid)
     compound_dict = {k: getattr(compound, k) for k in dir(compound) if k in ['_record'] or not k.startswith('_')}
     # compound_dict.update({pubchem2reasoner_dict.get(k, k): getattr(compound, k) for k in dir(compound) if not k.startswith('_')})
     compound_dict['_record'] = compound._record
     return compound_dict
 
+
+def get_compound_dict(cid):
+    """ Use HTTP REST to retrieve compound record as a serializable dictionary """
+    compound = pc.Compound.from_cid(cid)
+    compound_dict = {k: getattr(compound, k) for k in dir(compound) if k in ['_record'] or not k.startswith('_')}
+    # compound_dict.update({pubchem2reasoner_dict.get(k, k): getattr(compound, k) for k in dir(compound) if not k.startswith('_')})
+    compound_dict['_record'] = compound._record
+    return compound_dict
+
+
+def make_serializable(obj, force=False, depth=9):
+    """ recursively coerce Mapping to dict, GeneratorType to list, date/time to isoformat str """
+    # TODO: use dir(obj) to recurse deeper until you reach non-container objects
+    if not depth:
+        return obj
+    if isinstance(obj, abc.Mapping):
+        return {k: make_serializable(v) for (k, v) in dict(obj).items() if not callable(v)}
+    if isinstance(obj, (GeneratorType, np.ndarray)):
+        return [make_serializable(v) for v in obj if not callable(v)]
+    if hasattr(obj, 'to_dict'):
+        return obj.to_dict()
+    if isinstance(obj, (dt.datetime, dt.date)):
+        return obj.isoformat()
+    if isinstance(
+            obj,
+            (bool, str, int, float, dict, list, tuple, NoneType)):
+        return obj
+    if force:
+        return str(obj)
+    return obj
 
 def get_compound_dict_from_db(cid):
     df = select_df(columns=None, limit=10, id=cid)
@@ -54,7 +84,7 @@ def get_similar(d, k):
     return subdict
 
 
-def get_cid_paths(base_dir=CID_DIR):
+def get_cid_path_ints(base_dir=CID_DIR):
     return [int(p.name.split('_')[-1]) for p in Path(base_dir).glob('CID_*')]
 
 
@@ -103,18 +133,43 @@ def dict_edit_distances(m, pubchem_molecule):
 #         r['molecule'][k+'_'] = compound_dict[k]
 #     return r
 
+def make_serializable(d):
+
+
+
+def print_report_summary(report):
+    # print(f'== {cid} == {report["pubchem_report"]['connectivity_smiles']}' + '='*80)
+    cid = report['pubchem_report']['cid']
+    print(">>> report['pubchem_report']['cid'])")
+    print(cid)
+    print(f'>>> report = evaluate({cid}, with_ord={with_ord})')
+    print(f">>> report["pubchem_report"]['connectivity_smiles']")
+    print(report["pubchem_report"]['connectivity_smiles'])
+    print(f">>> print(json.dumps(report['distances'], indent=4))")
+    print(json.dumps(report['distances'], indent=4))
 
 
 def evaluate(cid=10297, with_ord=None):
     if cid is None:
-        cid = get_cid_paths()
+        return evaluate(cid=get_cid_path_ints(), with_ord=with_ord)
+    # if isinstance(cid, (list, tuple)):
+    #     reports = []
+    #     if with_ord is None or with_ord == 'both':
+    #         with_ord = (False, True)
+    #     for i in cid:
+    #         for wo in with_ord:
+    #             try:
+    #                 reports.append(evaluate(cid=int(i), with_ord=wo))
+    #             except Exception as err:
+    #                 log.error(f'{err}')
+    #     return reports
     if isinstance(cid, (list, tuple)):
         reports = []
         if with_ord is None or with_ord == 'both':
             with_ord = (False, True)
         if not isinstance(with_ord, tuple):
             with_ord = (with_ord,)
-        for i in get_cid_paths():
+        for i in cid:
             for wo in with_ord:
                 try:
                     reports.append(evaluate(cid=int(i), with_ord=wo))
@@ -149,7 +204,13 @@ def evaluate(cid=10297, with_ord=None):
     report['reasoner_response'] = json.loads(prompts[-1]['response'])
     final_response = json.loads(report['cot']['prompts'][-1]['response'])
     # print(json.dumps(report, indent=4))
-    print(f'== {cid} = {report["pubchem_report"]['connectivity_smiles']}' '='*80)
+    print(f'== {cid} == {report["pubchem_report"]['connectivity_smiles']}' + '='*80)
+    print(">>> report['pubchem_report']['cid'])")
+    print(report['pubchem_report']['cid'])
+    print(f'>>> report = evaluate({cid}, with_ord={with_ord})')
+    print(f">>> report["pubchem_report"]['connectivity_smiles']")
+    print(report["pubchem_report"]['connectivity_smiles'])
+    print(f">>> print(json.dumps(report['distances'], indent=4))")
     print(json.dumps(report['distances'], indent=4))
     return report
 
