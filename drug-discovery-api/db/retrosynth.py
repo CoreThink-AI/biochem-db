@@ -31,14 +31,12 @@ def split_smiles_set(s: Optional[str]) -> List[str]:
         return []
     return [x.strip() for x in s.split(".") if x.strip()]
 
-def default_step_score(row: Dict[str, Any], reactants: List[str]) -> float:
+def default_step_score(row: Dict[str, Any], _reactants: List[str]) -> float:
     score = 0.0
 
     y = row.get("yield_pct")
     t = row.get("temperature_c")
     safety = row.get("notes_safety")
-
-    score -= 0.6 * max(0, len(reactants) - 2)
 
     if y is not None:
         try:
