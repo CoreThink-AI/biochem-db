@@ -9,6 +9,8 @@ from pathlib import Path
 import pubchempy as pc
 import pandas as pd
 from pyxdameraulevenshtein import normalized_damerau_levenshtein_distance as normalized_distance
+from pyxdameraulevenshtein import damerau_levenshtein_distance as edit_distance
+from pyxdameraulevenshtein import damerau_levenshtein_distance_seqs as edit_distance_seqs
 # TODO: Use https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest#section=URL-based-API to get molecule data in serializable dictionaries rather than unserializable pubchempy objects
 
 
@@ -90,19 +92,133 @@ def get_cid_path_ints(base_dir=CID_DIR):
     return [int(p.name.split('_')[-1]) for p in Path(base_dir).glob('CID_*')]
 
 
-def dict_edit_distances(molecule_guess, pubchem_molecule):
+def pairup(a, b, metric=edit_distance, max_distance=None):
+    # a = [x.lower() for x in report['molecule_guess'].keys()]
+    # b = [x.lower() for x in report['pubchem_report'].keys()]
+    A = a
+    a = [x.lower() for x in A]
+    b = [x.lower() for x in B]
+    d = pd.DataFrame(pairwise_distances(a, b, metric=metric))
+    df = pd.DataFrame(d.values, columns=B, index=A)
+
+    best = {}
+    for colnum, col in enumerate(df.columns):
+        rownum = df[col].argmin()
+        # print(round(df.values[rownum][colnum],2), colnum, col, rownum, df.index.values[rownum])
+        best[col] = dict(dist=round(df.values[rownum][colnum],2), colnum=colnum, rownum=rownum, rowlabel=df.index.values[rownum])
+    best = pd.DataFrame(best).T
+    return best.sort_values('dist')[['dist', 'rowlabel']]
+
+
+def pair_closest(a, b, with_index=None, with_distance=None, lower=None, max_distance=None):
+    """ Create dictionary of closest matches between elements of a and elements of b
+
+    >>> pair_closest(list('ABC'), list('BC'))
+    {'A': 'B', 'B': 'B', 'C': 'C'}
+    >>> pair_closest(list('ABC'), list('BC'), max_distance=0)
+    {'A': None, 'B': 'B', 'C': 'C'}
+
+    >>> seq = 'Goodbye moon , hello world !'.split()
+    >>> pair_closest('Hell yea !'.split(), seq)
+    {'Hell': 'hello', 'yea': '!', '!': '!'}
+    >>> pair_closest('Hell yea !'.split(), seq, lower=True)
+    {'Hell': 'hello', 'yea': '!', '!': '!'}
+    >>> pair_closest('Hell yea !'.split(), seq, lower=False)
+    {'Hell': 'hello', 'yea': '!', '!': '!'}
+    >>> pair_closest('HELL YES !'.split(), seq, lower=False)
+    {'HELL': '!', 'YES': '!', '!': '!'}
+    >>> pair_closest('HELL YES !'.split(), seq, lower=False, max_distance=1)
+    {'HELL': None, 'YES': None, '!': '!'}
+    >>> pair_closest('HELL YES !'.split(), seq, lower=str.lower, max_distance=1)
+    {'HELL': 'hello', 'YES': None, '!': '!'}
+    >>> pair_closest('HELL YES !'.split(), seq, lower=True, with_distance=True, max_distance=1)
+    {'HELL': {'value': 'hello', 'distance': 1}, 'YES': None, '!': {'value': '!', 'distance': 0}}
+    >>> pair_closest('HELL YES !'.split(), seq, lower=True, with_index=True, with_distance=True)
+    {'HELL': {'value': 'hello', 'index': 3, 'distance': 1}, 'YES': {'value': '!', 'index': 5, 'distance': 3}, '!': {'value': '!', 'index': 5, 'distance': 0}}
+    """
+    return {x: get_closest(x, b, with_index=with_index, with_distance=with_distance, lower=lower, max_distance=max_distance) for x in a}
+
+
+def get_closest(a, seq, max_distance=None, with_index=None, with_distance=None, lower=str.lower):
+    """ Find the closest edit distance match for string a in sequence of strings seq
+
+    >>> seq = '! hello world ?'.split()
+    >>> get_closest('WORLD', seq, with_index=True, lower=False, max_distance=1)
+    >>> get_closest('WORLD', seq, with_index=True, with_distance=True, max_distance=None)
+    {'value': 'world', 'index': 2, 'distance': 0}
+    >>> get_closest('WORLD', seq, with_index=True, with_distance=True, lower=False, max_distance=None)
+    {'value': '!', 'index': 0, 'distance': 5}
+    >>> get_closest('WORLD', seq, with_index=True, with_distance=True, lower=True, max_distance=None)
+    {'value': 'world', 'index': 2, 'distance': 0}
+    """
+    if max_distance is None:
+        max_distance = len(a) + 1
+    A = a
+    if lower:
+        if not callable(lower):
+            lower = str.lower
+        a = lower(A)
+    seq_lowered = list(seq)
+    if lower:
+        seq_lowered = [lower(x) for x in seq]
+
+    """
+    >>> damerau_levenshtein_distance_seqs('Sjöstedt', ['Sjöstedt', 'Sjostedt', 'Söstedt', 'Sjöedt'])
+    [0, 1, 1, 2]
+    """
+    ans = sorted(zip(
+        edit_distance_seqs(
+            a,
+            seq_lowered,
+            max_distance=max_distance
+            ),
+        seq, range(len(seq)))
+    )
+    ans = [x for x in ans if x[0] <= max_distance]
+    if len(ans):
+        value = seq[ans[0][-1]]
+        d = dict(value=value)
+        if with_index:
+            d['index'] = ans[0][-1]
+        if with_distance:
+            d['distance'] = ans[0][0]
+        if len(d) == 1:
+            return d['value']
+        return d
+    return None 
+
+
+def dict_value_edit_distances(molecule_guess, pubchem_molecule):
     # zip(dir(pubchempy.Compound), response['molecule']))
-    map_schema_reasoner2pubchem = {
-        'name': 'name',
+    map_schema_reasoner2pubchem = {}
+    for k in molecule_guess:
+        map_schema_reasoner2pubchem[k] = k
+    #     map_schema_reasoner2pubchem[k] = camelcase_to_snake_case(k)
+    #     map_schema_reasoner2pubchem[homogenize(k)] = camelcase_to_snake_case(k)
+
+
+    pairs = pair_closest(
+        list(molecule_guess.keys()),
+        list(pubchem_molecule.keys()),
+        max_distance=2,
+        lower=homogenize)
+    pairs = {k: v for k, v in pairs.items() if v}
+    map_schema_reasoner2pubchem.update(pairs)
+
+    # for k in molecule_guess:
+    #     map_schema_reasoner2pubchem[k] = camelcase_to_snake_case(k)
+    #     map_schema_reasoner2pubchem[homogenize(k)] = camelcase_to_snake_case(k)
+
+    map_schema_reasoner2pubchem.update({
+        # 'name': 'name',
+        'name': 'iupac_name',
         'molecularWeight': 'molecular_weight',
         'smiles': 'connectivity_smiles',
         'yield': 'estimated_yield',
         # 'smiles': 'isomeric_smiles',
-    }
-    for k in molecule_guess:
-        map_schema_reasoner2pubchem[k] = camelcase_to_snake_case(k)
-        map_schema_reasoner2pubchem[homogenize(k)] = camelcase_to_snake_case(k)
-    
+    })
+    # if 'id' in map_schema_reasoner2pubchem:
+    #     del map_schema_reasoner2pubchem['id']
     distances = {}
     annotations ={}
     for k, guess in molecule_guess.items():
@@ -113,7 +229,7 @@ def dict_edit_distances(molecule_guess, pubchem_molecule):
             continue
         truth = pubchem_molecule[k_pubchem]
         distances[k_pubchem] = normalized_distance(str(truth), str(guess))
-        annotations[k + "_normalized_edit_distance"] = distances[k_pubchem]
+        # annotations[k + "_normalized_edit_distance"] = distances[k_pubchem]
         annotations[k + " "] = str(guess)
         annotations[k + '_'] = truth  # record the truth in the reasoner response dict
     molecule_guess.update(annotations)
@@ -156,9 +272,10 @@ def evaluate(cid=10297, with_ord=None):
             for wo in with_ord:
                 try:
                     report = evaluate(cid=int(i), with_ord=wo)
+                    reports.append(report) 
                 except Exception as err:
-                    log.error(f'{err}')
-                reports.append(report)  
+                    log.error(err)
+                    raise(err)
             a = reports[-2]['distances']
             b = reports[-1]['distances']
             edit_distance_changes = {k: (b[k] - a[k]) for k in a}
@@ -180,7 +297,7 @@ def evaluate(cid=10297, with_ord=None):
     cid = int(cid)
 
     compound_dict = get_compound_dict_pubchempy(cid=cid)
-    report = dict_edit_distances(cot['molecule'], compound_dict)
+    report = dict_value_edit_distances(cot['molecule'], compound_dict)
     report['pubchem_report'] = compound_dict
     report['cot'] = {k: cot[k] for k in sorted(cot)}
     report['cot']['prompts'] = prompts = [{k: p[k] for k in sorted(p)} for p in report['cot']['prompts']]
