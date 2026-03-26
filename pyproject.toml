@@ -18,6 +18,7 @@ dependencies = [
     "pyxdameraulevenshtein>=1.10.0",
     "rdkit",
     "requests",
+    "scikit-learn>=1.8.0",
     "spacy>=3.8.11",
     "sqlalchemy[asyncio,postgresql-psycopg2binary]>=2.0.48",
 ]
