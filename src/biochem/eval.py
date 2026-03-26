@@ -224,8 +224,10 @@ def dict_value_edit_distances(molecule_guess, pubchem_molecule):
     for k, guess in molecule_guess.items():
         if k.startswith('_') and k not in ['_record']:
             continue
+        if k.endswith('_'):
+            continue
         k_pubchem = map_schema_reasoner2pubchem[k]
-        if not k_pubchem in pubchem_molecule:
+        if not k_pubchem in pubchem_molecule or k_pubchem.endswith('_'):
             continue
         truth = pubchem_molecule[k_pubchem]
         distances[k_pubchem] = normalized_distance(str(truth), str(guess))
