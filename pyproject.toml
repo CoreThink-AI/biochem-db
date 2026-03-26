@@ -19,7 +19,7 @@ dependencies = [
     "rdkit",
     "requests",
     "spacy>=3.8.11",
-    "sqlalchemy[asyncio,postgresql-psycopg2binary,sqlcipher]>=2.0.48",
+    "sqlalchemy[asyncio,postgresql-psycopg2binary]>=2.0.48",
 ]
 
 [project.optional-dependencies]

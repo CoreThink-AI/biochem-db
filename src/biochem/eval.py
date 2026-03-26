@@ -195,6 +195,92 @@ def evaluate(cid=10297, with_ord=None):
     return report
 
 
+def generate_markdown_report(df, reports, experiment_name="experiment"):
+    markdown = []
+    markdown.append(f"# Evaluation Report: {experiment_name}")
+    markdown.append("")
+    markdown.append(f"**Total CIDs Evaluated:** {len(df)}")
+    markdown.append(f"**Total Reports Generated:** {len(reports)}")
+    markdown.append("")
+    
+    means = df.mean()
+    weights = {
+        'smiles': 40.0,
+        'inchi': 30.0,
+        'molecular_formula': 20.0,
+        'molecular_weight': 10.0
+    }
+
+    total_weighted_distance = 0.0
+    for metric, weight in weights.items():
+        if metric in means:
+            total_weighted_distance += abs(means[metric]) * weight
+    
+    comprehensive_score = max(0, 100 - (total_weighted_distance * 100))
+    
+    markdown.append("## Overall Performance Score")
+    markdown.append("")
+    markdown.append(f"### {comprehensive_score:.2f}")
+    markdown.append("")
+    markdown.append("*Comprehensive score (0-100 scale) based on weighted edit distance metrics:*")
+    markdown.append("- SMILES (40%), InChI (30%), Molecular Formula (20%), Molecular Weight (10%)")
+    markdown.append("- Higher is better: 100 = perfect predictions, 0 = maximum error")
+    markdown.append("")
+    
+    markdown.append("## Statistical Summary")
+    markdown.append("")
+    markdown.append("Edit distance changes (with ORD vs without ORD):")
+    markdown.append("")
+    markdown.append("```")
+    markdown.append(df.describe().to_string())
+    markdown.append("```")
+    markdown.append("")
+    
+    markdown.append("### Mean Edit Distance Changes and P-Values")
+    markdown.append("")
+    markdown.append("| Metric | Mean Change | P-Value |")
+    markdown.append("|--------|-------------|---------|")
+    
+    from scipy import stats
+    for metric in means.index:
+        if metric in df.columns:
+            mean_val = means[metric]
+            t_stat, p_value = stats.ttest_1samp(df[metric].dropna(), 0)
+            markdown.append(f"| {metric} | {mean_val:.6f} | {p_value:.4f} |")
+    markdown.append("")
+    
+    markdown.append("## Individual CID Summaries")
+    markdown.append("")
+    
+    for report in reports:
+        if 'summary' not in report:
+            continue
+        summary = report['summary']
+        cid = summary['cid']
+        markdown.append(f"### CID {cid}")
+        markdown.append("")
+        
+        markdown.append("**Edit Distance Changes:**")
+        markdown.append("")
+        markdown.append("| Metric | Change |")
+        markdown.append("|--------|--------|")
+        for metric, value in summary['edit_distance_changes'].items():
+            markdown.append(f"| {metric} | {value:.6f} |")
+        markdown.append("")
+        
+        if 'annotations' in summary:
+            markdown.append("**Key Annotations:**")
+            markdown.append("")
+            annotations = summary['annotations']
+            for key in ['smiles_normalized_edit_distance', 'inchi_normalized_edit_distance', 
+                       'molecular_formula_normalized_edit_distance', 'molecular_weight_normalized_edit_distance']:
+                if key in annotations:
+                    markdown.append(f"- **{key}**: {annotations[key]}")
+            markdown.append("")
+    
+    return "\n".join(markdown)
+
+
 def review_cot(cid):
     results = evaluate(cid=10297)
     print(dumps(report['response']['prompts'][-1]['response'], indent=4))
@@ -214,6 +300,8 @@ def review_cot(cid):
 
 
 if __name__ == '__main__':
+    experiment_name = CID_DIR.parent.parent.name if CID_DIR.parent.parent.name.startswith('experiment') else "evaluation"
+    
     reports = evaluate(None)
     changes = {r['summary']['cid']: r['summary']['edit_distance_changes'] for r in reports if 'summary' in r}
     df = pd.DataFrame(changes).T
@@ -221,7 +309,17 @@ if __name__ == '__main__':
         json.dump(reports, fout, indent=4)
     with open(CID_DIR / f'edit_distance_changes_{len(df)}_cids.csv', 'wt') as fout:
         df.to_csv(fout)
+    
+    markdown_content = generate_markdown_report(df, reports, experiment_name)
+    markdown_path = CID_DIR / f'evaluation_report_{experiment_name}_{len(df)}_cids.md'
+    with open(markdown_path, 'wt') as fout:
+        fout.write(markdown_content)
+    
+    print(f"\n{'='*80}")
+    print(f"Evaluation complete for {experiment_name}")
+    print(f"{'='*80}")
     print(df.describe())
+    print(f"\nMarkdown report saved to: {markdown_path}")
 
 
 

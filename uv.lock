@@ -262,7 +262,7 @@ dependencies = [
     { name = "rdkit" },
     { name = "requests" },
     { name = "spacy" },
-    { name = "sqlalchemy", extra = ["asyncio", "postgresql-psycopg2binary", "sqlcipher"] },
+    { name = "sqlalchemy", extra = ["asyncio", "postgresql-psycopg2binary"] },
 ]
 
 [package.optional-dependencies]
@@ -345,7 +345,7 @@ requires-dist = [
     { name = "requests" },
     { name = "spacy", specifier = ">=3.8.11" },
     { name = "sqlalchemy", marker = "extra == 'sql'" },
-    { name = "sqlalchemy", extras = ["asyncio", "postgresql-psycopg2binary", "sqlcipher"], specifier = ">=2.0.48" },
+    { name = "sqlalchemy", extras = ["asyncio", "postgresql-psycopg2binary"], specifier = ">=2.0.48" },
     { name = "streamlit-folium", marker = "extra == 'apps'" },
     { name = "watchfiles", marker = "extra == 'dev'" },
 ]
@@ -3372,17 +3372,6 @@ asyncio = [
 ]
 postgresql-psycopg2binary = [
     { name = "psycopg2-binary" },
-]
-sqlcipher = [
-    { name = "sqlcipher3-binary" },
-]
-
-[[package]]
-name = "sqlcipher3-binary"
-version = "0.6.0"
-source = { registry = "https://pypi.org/simple" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a7/ff/de25662f378f0a5cedef2a5c1d9479db5a9bf7b6bff4fdb8e413869548ac/sqlcipher3_binary-0.6.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:c8a7076a18b4f6fc9b580b0f24aa526d6a47605b1e3e6491ee3e9f2977940d8e", size = 3247275, upload-time = "2025-12-31T16:40:31.593Z" },
 ]
 
 [[package]]
