@@ -5,6 +5,7 @@ import json
 import logging
 import re
 import requests
+import time
 from pathlib import Path
 import pubchempy as pc
 import pandas as pd
@@ -18,13 +19,28 @@ CRE_CAPITAL_CHAR = re.compile("[A-Z]")
 log = logging.getLogger()
 
 
-def get_compound_dict_pubchempy(cid):
-    """ FIXME: use HTTP REST instead of pubchempy used here Query PubChem API to retrieve compound record as a dictionary """
-    compound = pc.Compound.from_cid(cid)
-    compound_dict = {k: v  for (k, v) in compound.to_dict().items() if k in ['_record'] or not k.startswith('_')}
-    # compound_dict.update({pubchem2reasoner_dict.get(k, k): getattr(compound, k) for k in dir(compound) if not k.startswith('_')})
-    # compound_dict['_record'] = compound._record
-    return compound_dict
+def get_compound_dict_pubchempy(cid, max_retries=5, initial_wait=1):
+    """ Query PubChem API to retrieve compound record as a dictionary with retry logic for 503 errors """
+    wait_time = initial_wait
+    
+    for attempt in range(max_retries):
+        try:
+            compound = pc.Compound.from_cid(cid)
+            compound_dict = {k: v  for (k, v) in compound.to_dict().items() if k in ['_record'] or not k.startswith('_')}
+            return compound_dict
+        except pc.ServerBusyError as e:
+            if attempt < max_retries - 1:
+                log.warning(f"PubChem ServerBusy for CID {cid}, attempt {attempt + 1}/{max_retries}. Waiting {wait_time}s...")
+                time.sleep(wait_time)
+                wait_time *= 2  # Exponential backoff
+            else:
+                log.error(f"PubChem ServerBusy for CID {cid} after {max_retries} attempts")
+                raise
+        except Exception as e:
+            log.error(f"Error fetching CID {cid}: {e}")
+            raise
+    
+    return None
 
 
 # def get_compound_dict(cid):
