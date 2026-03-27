@@ -45,13 +45,14 @@
 
 #### 3. experiment-3
 
-- [ ] single-prompt reasoning CoT: f"Here is a summary of the record for CID {cid} from PubChem: named {name}, SMILES {smiles}, inchi {inchi}."
-- [ ] Adjust the model to `gpt-oss-120B ` or  any close to 5.1 in size & free utilization
+- [X] single-prompt reasoning CoT: f"Here is a summary of the record for CID {cid} from PubChem: named {name}, SMILES {smiles}, inchi {inchi}."
+- [X] Adjust the model to `gpt-oss-120B ` or  any close to 5.1 in size & free utilization
 - [X] single number metric for performance/accuracy in markdown report
   weighted averages : smiles / 40%, inchi /30%, molecular formula/20%, molecular weight/10%
 
 #### 4. experiment-4
 
+- [ ] Adjust the promts based on the reactions order - split into smaller sections and capture the promtpt
 - [ ] Here is the complete json record from ORD for the chemical reaction that we need to use to synthesize this chemical compound: CID {cid} {name}."
 - [ ] retrieve all ORD information about each reaction in a workflow for a given chemical product (drug)
 - [ ] put one reaction's information in the prompt (including reactants, product, and any conditions like temperature)
