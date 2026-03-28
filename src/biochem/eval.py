@@ -278,11 +278,16 @@ def print_report_summary(report, with_ord=None):
     print()
 
 
-
-
-def evaluate(cid=10297, with_ord=None, experiment_number=3):
+def evaluate(cid=10297, with_ord=None, experiment_path=ZYDUS_DIR / 'experiment-3'):
+    if experiment_path is None:
+        raise NotImplementedError("return all df, report pairs for all experiments")
     if cid is None:
         return evaluate(cid=get_cid_path_ints(), with_ord=with_ord)
+    if isinstance(experiment_path, int):
+        experiment_path = ZYDUS_DIR / f'experiment-{experiment_path}'
+    if not isinstance(experiment_path, Path):
+        raise NotImplementedError("run evaluate() on a list of `experiment_path`s (directories)")
+
     if isinstance(cid, (list, tuple)):
         reports = []
         if with_ord is None or with_ord == 'both':
@@ -303,12 +308,12 @@ def evaluate(cid=10297, with_ord=None, experiment_number=3):
             reports[-1]['edit_distance_changes'] = edit_distance_changes
             summary = dict(cid=i, edit_distance_changes=edit_distance_changes, annotations=reports[-1]['annotations'])
             reports[-1]['summary'] = summary
-            summary_path =  (ZYDUS_DIR / f'CID_{i}') / 'base_reasoner+ord.summary.json'
+            summary_path =  (experiment_path / f'CID_{i}') / 'base_reasoner+ord.summary.json'
             with open(summary_path, 'wt') as fout:
                 json.dump(summary, fout, indent=4)
         return reports
 
-    reasoning_path = (ZYDUS_DIR / f'CID_{cid}' / 'base_reasoner.json')
+    reasoning_path = (experiment_path / f'CID_{cid}' / 'base_reasoner.json')
     if with_ord:
         reasoning_path =  reasoning_path.parent / 'base_reasoner+ord.json'
     reasoning = json.load(open(reasoning_path))
@@ -334,6 +339,13 @@ def evaluate(cid=10297, with_ord=None, experiment_number=3):
 
 
 def get_experiment_paths(experiment_number=None, zydus_dir=ZYDUS_DIR):
+    """ Get sorted list of absolute paths to experiment-1 ... experiment-N directories 
+
+    >>> get_experiment_paths()
+    [PosixPath('...reasoner/experiment-1'),
+     PosixPath('...reasoner/experiment-2'),
+     PosixPath('...reasoner/experiment-3')]
+    """
     assert zydus_dir.is_dir(), "zydus_dir must be a valid path to a directory"
     paths = []
     for p in zydus_dir.glob('experiment*'):
@@ -343,11 +355,11 @@ def get_experiment_paths(experiment_number=None, zydus_dir=ZYDUS_DIR):
         if match:
             if experiment_number is None or match.groups()[-1] == str(experiment_number):
                 paths.append(p)
-    return paths
+    return sorted(paths)
 
 
 def get_df_reports(experiment_number=None, zydus_dir=ZYDUS_DIR):
-    paths = get_experiment_paths(experiment_number, zydus_dir)
+    paths = get_experiment_paths(experiment_number=experiment_number, zydus_dir=zydus_dir)
     reports_dict = {}
     for p in paths:
         reports = evaluate(None)
@@ -366,23 +378,13 @@ def generate_markdown_report(experiment_number=1):
     markdown.append(f"**Total Reports Generated:** {len(reports)}")
     markdown.append("")
     
-    means = df.mean()
+    distance_improvements = df.mean()    
+    mean_distance_improvement = distance_improvements.mean()
 
-
-    total_weighted_distance = 0.0
-    for metric, weight in weights.items():
-        if metric in means:
-            total_weighted_distance += abs(means[metric]) * weight
-    
-    comprehensive_score = max(0, 100 - (total_weighted_distance * 100))
-    
     markdown.append("## Overall Performance Score")
     markdown.append("")
-    markdown.append(f"### {comprehensive_score:.2f}")
+    markdown.append(f"### {mean_distance_improvement:.2f}")
     markdown.append("")
-    markdown.append("*Comprehensive score (0-100 scale) based on weighted edit distance metrics:*")
-    markdown.append("- SMILES (40%), InChI (30%), Molecular Formula (20%), Molecular Weight (10%)")
-    markdown.append("- Higher is better: 100 = perfect predictions, 0 = maximum error")
     markdown.append("")
     
     markdown.append("## Statistical Summary")
@@ -457,14 +459,20 @@ def review_cot(cid):
 
 
 if __name__ == '__main__':
-    experiment_number = -1
+    experiment_number = -1  # 'last' | 'all'
     if sys.argv[1:]:
         experiment_number = int(sys.argv[1])
     paths = get_experiment_paths(experiment_number)
-    experiment_name = None
-    if experiment_number and experiment_number < 0:
-        experiment_name = [p for p in paths][experiment_number].name
+    experiment_name, experiment_path = None, None
+    if not experiment_number:
+        raise RuntimeError(f'Invalid experiment number: {experiment_number}')
+    experiment_path = ZYDUS_DIR / f'experiment-{experiment_number}'
+    experiment_name = experiment_path.name        
+    if experiment_number < 0:
+        experiment_path = paths[experiment_number]
+        experiment_name = experiment_path.name
     
+    reports, df = evaluate(experiment_path=experiment_path)
     with open(ZYDUS_DIR / f'evaluation_report_{len(reports)/2}_cids.json', 'wt') as fout:
         json.dump(reports, fout, indent=4)
     with open(ZYDUS_DIR / f'edit_distance_changes_{len(df)}_cids.csv', 'wt') as fout:
