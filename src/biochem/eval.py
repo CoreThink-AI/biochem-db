@@ -1,5 +1,5 @@
 """ Directly queries pubchem API rather (using `src/biochem/pubchem` than local PostgreSQL database (using `src/biochem/db.py`) so that anyone can use it """ 
-from biochem.constants import CID_DIR
+from biochem.constants import ZYDUS_DIR
 from collections import abc
 import json
 import logging
@@ -204,7 +204,7 @@ def get_closest(a, seq, max_distance=None, with_index=None, with_distance=None, 
     return None 
 
 
-def dict_value_edit_distances(molecule_guess, pubchem_molecule):
+def dict_value_edit_distances(molecule_guess, pubchem_molecule, distance_metric=edit_distance):
     # zip(dir(pubchempy.Compound), response['molecule']))
     map_schema_reasoner2pubchem = {}
     for k in molecule_guess:
@@ -246,7 +246,7 @@ def dict_value_edit_distances(molecule_guess, pubchem_molecule):
         if not k_pubchem in pubchem_molecule or k_pubchem.endswith('_'):
             continue
         truth = pubchem_molecule[k_pubchem]
-        distances[k_pubchem] = normalized_distance(str(truth), str(guess))
+        distances[k_pubchem] = distance_metric(str(truth), str(guess))
         # annotations[k + "_normalized_edit_distance"] = distances[k_pubchem]
         annotations[k + " "] = str(guess)
         annotations[k + '_'] = truth  # record the truth in the reasoner response dict
@@ -330,7 +330,8 @@ def evaluate(cid=10297, with_ord=None):
     return report
 
 
-def generate_markdown_report(df, reports, experiment_name="experiment"):
+def generate_markdown_report(experiment_number=1):
+    df, reports = get_experiment_reports(experiment_number)
     markdown = []
     markdown.append(f"# Evaluation Report: {experiment_name}")
     markdown.append("")
@@ -339,12 +340,7 @@ def generate_markdown_report(df, reports, experiment_name="experiment"):
     markdown.append("")
     
     means = df.mean()
-    weights = {
-        'smiles': 40.0,
-        'inchi': 30.0,
-        'molecular_formula': 20.0,
-        'molecular_weight': 10.0
-    }
+
 
     total_weighted_distance = 0.0
     for metric, weight in weights.items():
@@ -435,6 +431,7 @@ def review_cot(cid):
 
 
 if __name__ == '__main__':
+    experiment_number = 1
     experiment_name = CID_DIR.parent.parent.name if CID_DIR.parent.parent.name.startswith('experiment') else "evaluation"
     
     reports = evaluate(None)

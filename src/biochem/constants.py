@@ -6,7 +6,7 @@ from pathlib import Path
 dotenv.load_dotenv()
 
 DATA_DIR = Path(__file__).parent / 'data'
-CID_DIR = DATA_DIR.parent.parent.parent.parent / 'zydus-reasoner/eval_results/reasoner_comparison/CID'
+ZYDUS_DIR = DATA_DIR.parent.parent.parent.parent / 'zydus-reasoner'
 
 ENV = dict(
     PG_USERNAME = 'hobs',
