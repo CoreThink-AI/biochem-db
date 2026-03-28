@@ -5,6 +5,7 @@ import json
 import logging
 import re
 import requests
+from scipy import stats
 import time
 from pathlib import Path
 import pubchempy as pc
@@ -104,7 +105,7 @@ def get_similar(d, k):
     return subdict
 
 
-def get_cid_path_ints(base_dir=CID_DIR):
+def get_cid_path_ints(base_dir=ZYDUS_DIR):
     return [int(p.name.split('_')[-1]) for p in Path(base_dir).glob('CID_*')]
 
 
@@ -277,7 +278,9 @@ def print_report_summary(report, with_ord=None):
     print()
 
 
-def evaluate(cid=10297, with_ord=None):
+
+
+def evaluate(cid=10297, with_ord=None, experiment_number=3):
     if cid is None:
         return evaluate(cid=get_cid_path_ints(), with_ord=with_ord)
     if isinstance(cid, (list, tuple)):
@@ -300,12 +303,12 @@ def evaluate(cid=10297, with_ord=None):
             reports[-1]['edit_distance_changes'] = edit_distance_changes
             summary = dict(cid=i, edit_distance_changes=edit_distance_changes, annotations=reports[-1]['annotations'])
             reports[-1]['summary'] = summary
-            summary_path =  (CID_DIR / f'CID_{i}') / 'base_reasoner+ord.summary.json'
+            summary_path =  (ZYDUS_DIR / f'CID_{i}') / 'base_reasoner+ord.summary.json'
             with open(summary_path, 'wt') as fout:
                 json.dump(summary, fout, indent=4)
         return reports
 
-    reasoning_path = (CID_DIR / f'CID_{cid}' / 'base_reasoner.json')
+    reasoning_path = (ZYDUS_DIR / f'CID_{cid}' / 'base_reasoner.json')
     if with_ord:
         reasoning_path =  reasoning_path.parent / 'base_reasoner+ord.json'
     reasoning = json.load(open(reasoning_path))
@@ -328,6 +331,30 @@ def evaluate(cid=10297, with_ord=None):
     with open(Path(reasoning_path).with_suffix('.report.json'), 'wt') as fout:
         json.dump(report, fout, indent=4)
     return report
+
+
+def get_experiment_paths(experiment_number=None, zydus_dir=ZYDUS_DIR):
+    assert zydus_dir.is_dir(), "zydus_dir must be a valid path to a directory"
+    paths = []
+    for p in zydus_dir.glob('experiment*'):
+        if not p.is_dir():
+            continue
+        match = re.match(r'^experiment[-]?([0-9]+)$', p.name)
+        if match:
+            if experiment_number is None or match.groups()[-1] == str(experiment_number):
+                paths.append(p)
+    return paths
+
+
+def get_df_reports(experiment_number=None, zydus_dir=ZYDUS_DIR):
+    paths = get_experiment_paths(experiment_number, zydus_dir)
+    reports_dict = {}
+    for p in paths:
+        reports = evaluate(None)
+        changes = {r['summary']['cid']: r['summary']['edit_distance_changes'] for r in reports if 'summary' in r}
+        df = pd.DataFrame(changes).T
+        reports_dict[p.name] = dict(df=df, reports=reports)
+    return reports_dict
 
 
 def generate_markdown_report(experiment_number=1):
@@ -372,7 +399,6 @@ def generate_markdown_report(experiment_number=1):
     markdown.append("| Metric | Mean Change | P-Value |")
     markdown.append("|--------|-------------|---------|")
     
-    from scipy import stats
     for metric in means.index:
         if metric in df.columns:
             mean_val = means[metric]
@@ -431,19 +457,21 @@ def review_cot(cid):
 
 
 if __name__ == '__main__':
-    experiment_number = 1
-    experiment_name = CID_DIR.parent.parent.name if CID_DIR.parent.parent.name.startswith('experiment') else "evaluation"
+    experiment_number = -1
+    if sys.argv[1:]:
+        experiment_number = int(sys.argv[1])
+    paths = get_experiment_paths(experiment_number)
+    experiment_name = None
+    if experiment_number and experiment_number < 0:
+        experiment_name = [p for p in paths][experiment_number].name
     
-    reports = evaluate(None)
-    changes = {r['summary']['cid']: r['summary']['edit_distance_changes'] for r in reports if 'summary' in r}
-    df = pd.DataFrame(changes).T
-    with open(CID_DIR / f'evaluation_report_{len(reports)/2}_cids.json', 'wt') as fout:
+    with open(ZYDUS_DIR / f'evaluation_report_{len(reports)/2}_cids.json', 'wt') as fout:
         json.dump(reports, fout, indent=4)
-    with open(CID_DIR / f'edit_distance_changes_{len(df)}_cids.csv', 'wt') as fout:
+    with open(ZYDUS_DIR / f'edit_distance_changes_{len(df)}_cids.csv', 'wt') as fout:
         df.to_csv(fout)
     
     markdown_content = generate_markdown_report(df, reports, experiment_name)
-    markdown_path = CID_DIR / f'evaluation_report_{experiment_name}_{len(df)}_cids.md'
+    markdown_path = ZYDUS_DIR / f'evaluation_report_{experiment_name}_{len(df)}_cids.md'
     with open(markdown_path, 'wt') as fout:
         fout.write(markdown_content)
     
@@ -456,14 +484,14 @@ if __name__ == '__main__':
 
 
     
-    # cid_dirs = list(CID_DIR.glob('CID_1029*'))
+    # ZYDUS_DIRs = list(ZYDUS_DIR.glob('CID_1029*'))
     # pairs = []
-    # for cid_dir in cid_dirs:
+    # for ZYDUS_DIR in ZYDUS_DIRs:
     #     pairs.append(( 
-    #         json.load(open(cid_dir / 'base_reasoner.json')),
-    #         json.load(open(cid_dir / 'base_reasoner+ord.json'))
+    #         json.load(open(ZYDUS_DIR / 'base_reasoner.json')),
+    #         json.load(open(ZYDUS_DIR / 'base_reasoner+ord.json'))
     #         ))
-    #     pairs[-1][0]['cid'] = int(cid_dir.name.split('_')[-1])
+    #     pairs[-1][0]['cid'] = int(ZYDUS_DIR.name.split('_')[-1])
     # evals = []
     # for p in pairs:
     #     evals.append(evaluate(p[0]), evaluate(p[1]))
