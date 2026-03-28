@@ -105,8 +105,10 @@ def get_similar(d, k):
     return subdict
 
 
-def get_cid_path_ints(base_dir=ZYDUS_DIR):
-    return [int(p.name.split('_')[-1]) for p in Path(base_dir).glob('CID_*')]
+def get_cid_path_ints(experiment_number=-1):
+    path, name, number = get_experiment_path_name_number(experiment_number)
+    cid_dir = path / 'reasoner_comparison' / 'CID'
+    return [int(p.name.split('_')[-1]) for p in cid_dir.glob('CID_*')]
 
 
 def pairup(a, b, metric=edit_distance, max_distance=None):
@@ -278,17 +280,22 @@ def print_report_summary(report, with_ord=None):
     print()
 
 
-def evaluate(cid=10297, with_ord=None, experiment_path=ZYDUS_DIR / 'experiment-3'):
+def evaluate(cid=None, with_ord=None, experiment_path=ZYDUS_DIR / 'experiment-4'):
     if experiment_path is None:
         raise NotImplementedError("return all df, report pairs for all experiments")
+    cid_list = [int(i) for i in get_cid_path_ints()]
     if cid is None:
-        return evaluate(cid=get_cid_path_ints(), with_ord=with_ord)
+        cid = cid_list
     if isinstance(experiment_path, int):
         experiment_path = ZYDUS_DIR / f'experiment-{experiment_path}'
     if not isinstance(experiment_path, Path):
-        raise NotImplementedError("run evaluate() on a list of `experiment_path`s (directories)")
-
+        raise NotImplementedError("run evaluate() on a list of `experiment_path`s (directories)")    
+    
+    path, name, number = get_experiment_path_name_number(experiment_path)
+    cid_dir = path / 'reasoner_comparison' / 'CID'
+    
     if isinstance(cid, (list, tuple)):
+        print('cid', cid)
         reports = []
         if with_ord is None or with_ord == 'both':
             with_ord = (False, True)
@@ -297,7 +304,7 @@ def evaluate(cid=10297, with_ord=None, experiment_path=ZYDUS_DIR / 'experiment-3
         for i in cid:
             for wo in with_ord:
                 try:
-                    report = evaluate(cid=int(i), with_ord=wo)
+                    report = evaluate(cid=int(i), with_ord=wo, experiment_path=experiment_path)
                     reports.append(report) 
                 except Exception as err:
                     log.error(err)
@@ -308,12 +315,13 @@ def evaluate(cid=10297, with_ord=None, experiment_path=ZYDUS_DIR / 'experiment-3
             reports[-1]['edit_distance_changes'] = edit_distance_changes
             summary = dict(cid=i, edit_distance_changes=edit_distance_changes, annotations=reports[-1]['annotations'])
             reports[-1]['summary'] = summary
-            summary_path =  (experiment_path / f'CID_{i}') / 'base_reasoner+ord.summary.json'
+            summary_path =  (cid_dir / f'CID_{i}') / 'base_reasoner+ord.summary.json'
             with open(summary_path, 'wt') as fout:
                 json.dump(summary, fout, indent=4)
         return reports
+    assert cid in cid_list, f'CID={cid} not found in {cid_list}'
+    reasoning_path = (cid_dir / f'CID_{cid}' / 'base_reasoner.json')
 
-    reasoning_path = (experiment_path / f'CID_{cid}' / 'base_reasoner.json')
     if with_ord:
         reasoning_path =  reasoning_path.parent / 'base_reasoner+ord.json'
     reasoning = json.load(open(reasoning_path))
@@ -358,14 +366,11 @@ def get_experiment_paths(experiment_number=None, zydus_dir=ZYDUS_DIR):
     return sorted(paths)
 
 
-def get_df_reports(experiment_number=None, zydus_dir=ZYDUS_DIR):
-    paths = get_experiment_paths(experiment_number=experiment_number, zydus_dir=zydus_dir)
-    reports_dict = {}
-    for p in paths:
-        reports = evaluate(None)
-        changes = {r['summary']['cid']: r['summary']['edit_distance_changes'] for r in reports if 'summary' in r}
-        df = pd.DataFrame(changes).T
-        reports_dict[p.name] = dict(df=df, reports=reports)
+def get_df_reports(experiment, zydus_dir=ZYDUS_DIR):
+    """ Load reports from experiment-# dir (or list of reports in `experiment`) and compute improvement DF """
+    reports = experiment
+    if isinstance(experiment, int):
+        reports = evaluate(cid=None, experiment_path=experiment)
     return reports_dict
 
 
@@ -458,36 +463,50 @@ def review_cot(cid):
         print(p['user_prompt'])
 
 
+def get_experiment_path_name_number(experiment_number=None):
+    experiment_path = None
+    if isinstance(experiment_number, Path):
+        experiment_path = experiment_number
+        experiment_number = -1  # 'last' | 'all'
+    else:
+        experiment_number = experiment_number or -1  # 'last' | 'all'
+        paths = get_experiment_paths(None)
+        experiment_path = ZYDUS_DIR / f'experiment-{experiment_number}'
+        if not experiment_number:
+            raise RuntimeError(f'Invalid experiment number: {experiment_number}')
+        experiment_number = int(experiment_number)
+        if experiment_number < 0:
+            experiment_path = paths[experiment_number]
+    return (
+        experiment_path,
+        experiment_path.name,
+        int(experiment_path.name.split('-')[-1]),
+        )
+
+
 if __name__ == '__main__':
-    experiment_number = -1  # 'last' | 'all'
+    experiment_number = -1
     if sys.argv[1:]:
         experiment_number = int(sys.argv[1])
-    paths = get_experiment_paths(experiment_number)
-    experiment_name, experiment_path = None, None
-    if not experiment_number:
-        raise RuntimeError(f'Invalid experiment number: {experiment_number}')
-    experiment_path = ZYDUS_DIR / f'experiment-{experiment_number}'
-    experiment_name = experiment_path.name        
-    if experiment_number < 0:
-        experiment_path = paths[experiment_number]
-        experiment_name = experiment_path.name
+    path, name, number = get_experiment_path_name_number(experiment_number)
     
-    reports, df = evaluate(experiment_path=experiment_path)
-    with open(ZYDUS_DIR / f'evaluation_report_{len(reports)/2}_cids.json', 'wt') as fout:
-        json.dump(reports, fout, indent=4)
-    with open(ZYDUS_DIR / f'edit_distance_changes_{len(df)}_cids.csv', 'wt') as fout:
-        df.to_csv(fout)
+    reports = evaluate(experiment_path=path)
+    df_reports_dict = get_df_reports()
+    # with open(ZYDUS_DIR / f'evaluation_report_{len(reports)/2}_cids.json', 'wt') as fout:
+    #     json.dump(reports, fout, indent=4)
+    # with open(ZYDUS_DIR / f'edit_distance_changes_{len(df)}_cids.csv', 'wt') as fout:
+    #     df.to_csv(fout)
     
-    markdown_content = generate_markdown_report(df, reports, experiment_name)
-    markdown_path = ZYDUS_DIR / f'evaluation_report_{experiment_name}_{len(df)}_cids.md'
-    with open(markdown_path, 'wt') as fout:
-        fout.write(markdown_content)
+    # markdown_content = generate_markdown_report(df, reports, experiment_name)
+    # markdown_path = path / f'evaluation_report_{experiment_name}_{len(df)}_cids.md'
+    # with open(markdown_path, 'wt') as fout:
+    #     fout.write(markdown_content)
     
-    print(f"\n{'='*80}")
-    print(f"Evaluation complete for {experiment_name}")
-    print(f"{'='*80}")
-    print(df.describe())
-    print(f"\nMarkdown report saved to: {markdown_path}")
+    # print(f"\n{'='*80}")
+    # print(f"Evaluation complete for {experiment_name}")
+    # print(f"{'='*80}")
+    # print(df.describe())
+    # print(f"\nMarkdown report saved to: {markdown_path}")
 
 
 
